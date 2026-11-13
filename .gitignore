@@ -1,0 +1,10 @@
+# Python и артефакты сборки
+installer/python/
+installer/payload.bin
+tools/__pycache__/
+*.pyc
+
+# Локальные логи и временные файлы
+*.log
+*.tmp
+status.txt

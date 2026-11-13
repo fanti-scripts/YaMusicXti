@@ -1,0 +1,14 @@
+{
+  "adaptive": true,
+  "file": "",
+  "blur": 0,
+  "brightness": 1,
+  "dim": 0.25,
+  "vignette": 0,
+  "navbarDim": 0.35,
+  "playerTransparency": 0.48,
+  "playerBlur": 20,
+  "playerSaturate": 1.15,
+  "fade": 600,
+  "poll": 1500
+}
