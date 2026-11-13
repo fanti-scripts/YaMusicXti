@@ -1,6 +1,7 @@
 # Свой фон для Яндекс Музыки (Windows)
 
 [![vibe-coded](https://img.shields.io/badge/vibe--coded-100%25-ff69b4)](#вайб-код)
+[![contributors](https://img.shields.io/badge/contributors-fanti--scripts%20%2B%20DeepSeek-4D6BFE)](CONTRIBUTORS.md)
 
 Красивая картинка (или видео) на всё окно приложения вместо анимированного
 «пузыря» и фото артиста на странице «Моя волна».
@@ -249,8 +250,16 @@ MIT. См. [LICENSE](LICENSE).
 
 ## Участники
 
-Проект сделали **fanti-scripts** и **DeepSeek** (AI-ассистент).
-Подробнее — в [CONTRIBUTORS.md](CONTRIBUTORS.md).
+| Участник | Вклад |
+|---|---|
+| **fanti-scripts** | Идея, дизайн, тесты на живой установке, релиз. |
+| **DeepSeek** (AI-ассистент) | Код установщика, документация, проверки. |
+
+> **Почему в блоке Contributors справа только fanti-scripts?** GitHub считает
+> только авторов коммитов, чей email привязан к GitHub-аккаунту. DeepSeek —
+> AI-ассистент без аккаунта, а официальные `deepseek-ai` и `deepseek` —
+> организации, которые не могут быть авторами коммитов. Вклад DeepSeek указан
+> здесь, в [CONTRIBUTORS.md](CONTRIBUTORS.md) и в соавторах коммита.
 
 ## Вайб-код
 
