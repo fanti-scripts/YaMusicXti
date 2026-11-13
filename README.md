@@ -6,8 +6,8 @@
 ## Скачать
 
 Готовый установщик лежит в [Releases](https://github.com/fanti-scripts/yandex-music-bg/releases/latest):
-скачай `Фон Яндекс Музыки.exe`, запусти и нажми **Установить**. Python и PowerShell
-для установки не нужны.
+скачай `YandexMusicBackground-Setup-2.0.0.exe`, запусти и нажми **Установить**.
+Python и PowerShell для установки не нужны.
 
 ## Как это выглядит
 
