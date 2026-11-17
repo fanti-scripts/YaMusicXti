@@ -38,6 +38,7 @@ ENGINE = r"""
     web: C.web || '',
     webBase: C.webBase || '',
     webStamp: Number(C.webStamp) || 0,
+    fit: (['smart','cover','contain','stretch'].indexOf(String(C.fit || '')) !== -1) ? String(C.fit) : 'smart',
     token: C.token || ''
   };
 
@@ -49,8 +50,13 @@ ENGINE = r"""
       '--ym-vig:' + cfg.vignette + ';--ym-nav:' + cfg.navbarDim + ';}',
     '#ym-bg .ym-layer{position:absolute;inset:0;opacity:0;transition:opacity ' + cfg.fade + 'ms ease;}',
     '#ym-bg .ym-layer.active{opacity:1;}',
-    '#ym-bg .ym-media{width:100%;height:100%;object-fit:cover;object-position:center;display:block;',
+    '#ym-bg .ym-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block;',
       'filter:brightness(var(--ym-bright)) blur(var(--ym-blur));transform:scale(1.02) translateZ(0);}',
+    '#ym-bg .ym-media.ym-fit-contain{object-fit:contain;}',
+    '#ym-bg .ym-media.ym-fit-stretch{object-fit:fill;}',
+    '#ym-bg .ym-media.ym-front{object-fit:contain;transform:translateZ(0);}',
+    '#ym-bg .ym-media.ym-back{object-fit:cover;transform:scale(1.2) translateZ(0);',
+      'filter:brightness(.62) saturate(1.08) blur(34px);}',
     '#ym-bg iframe.ym-media{border:0;background:transparent;}',
     '#ym-bg .ym-shade{position:absolute;inset:0;background:rgba(0,0,0,var(--ym-dim));}',
     '#ym-bg .ym-vignette{position:absolute;inset:0;opacity:var(--ym-vig);',
@@ -260,9 +266,7 @@ ENGINE = r"""
     }catch(e){}
   }
 
-  function setMedia(layer, url, isVideo){
-    if(!layer) return;
-    layer.textContent = '';
+  function makeMedia(url, isVideo, cls){
     var el;
     if(isVideo){
       el = document.createElement('video');
@@ -274,9 +278,27 @@ ENGINE = r"""
     } else {
       el = document.createElement('img');
       el.src = url;
+      el.decoding = 'async';
     }
-    el.className = 'ym-media';
-    layer.appendChild(el);
+    el.className = 'ym-media' + (cls ? ' ' + cls : '');
+    return el;
+  }
+
+  function setMedia(layer, url, isVideo, fit){
+    if(!layer) return;
+    layer.textContent = '';
+    var mode = fit || 'smart';
+    try{
+      if(mode === 'smart'){
+        // Вся картинка целиком (contain), а полосы по краям заполняет
+        // размытая копия того же кадра — без чёрных полей.
+        layer.appendChild(makeMedia(url, isVideo, 'ym-back'));
+        layer.appendChild(makeMedia(url, isVideo, 'ym-front'));
+        return;
+      }
+      var cls = mode === 'contain' ? 'ym-fit-contain' : (mode === 'stretch' ? 'ym-fit-stretch' : '');
+      layer.appendChild(makeMedia(url, isVideo, cls));
+    }catch(e){}
   }
 
   function setWeb(layer, url){
@@ -314,7 +336,7 @@ ENGINE = r"""
     var inactive = (active === layers[0]) ? layers[1] : layers[0];
     try{
       if(isWeb) setWeb(inactive, url);
-      else setMedia(inactive, url, isVideo);
+      else setMedia(inactive, url, isVideo, cfg.fit);
     }catch(e){ return; }
     currentUrl = url;
     currentWeb = !!isWeb;
@@ -386,6 +408,14 @@ ENGINE = r"""
       if(d[k] !== undefined && d[k] !== null && d[k] !== '') cfg[k] = Number(d[k]);
     });
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
+    var fitChanged = false;
+    if(d.fit !== undefined){
+      var f = String(d.fit || '');
+      if(['smart','cover','contain','stretch'].indexOf(f) !== -1 && f !== cfg.fit){
+        cfg.fit = f;
+        fitChanged = true;
+      }
+    }
     if(d.css !== undefined) cfg.css = String(d.css || '');
     if(d.file !== undefined) cfg.file = String(d.file || '');
     if(d.web !== undefined) cfg.web = String(d.web || '');
@@ -408,6 +438,9 @@ ENGINE = r"""
       r.style.setProperty('--ym-nav', cfg.navbarDim);
     }
     var wu = webSrc();
+    // Смена масштаба требует перерисовать текущий кадр (но не видео с нуля
+    // при обычном движении ползунков).
+    if(fitChanged){ currentUrl = null; lastCover = null; }
     setAdaptiveWatchers(cfg.adaptive);
     if(cfg.adaptive){
       lastCover = null;
@@ -460,6 +493,21 @@ ENGINE = r"""
     '.ym-chips{display:flex;gap:6px;flex-wrap:wrap;}',
     '.ym-chip{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7);border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;}',
     '.ym-chip:hover{background:rgba(255,255,255,.1);color:#fff;}',
+    '.ym-chip.on{background:rgba(255,219,77,.16);border-color:rgba(255,219,77,.55);color:#ffdb4d;}',
+    '.ym-fitrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:12.5px;color:#d7dbe3;}',
+    '.ym-fitrow .ym-chips{flex-wrap:nowrap;}',
+    '.ym-gallery-card{margin-top:16px;}',
+    '.ym-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(156px,1fr));gap:10px;margin-top:12px;}',
+    '.ym-gal-empty{display:none;font-size:12.5px;color:rgba(255,255,255,.4);margin-top:10px;}',
+    '.ym-gal-tile{position:relative;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#0b0d11;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:border-color .15s,transform .15s;}',
+    '.ym-gal-tile:hover{border-color:rgba(255,219,77,.5);transform:translateY(-1px);}',
+    '.ym-gal-tile.on{border-color:#ffdb4d;box-shadow:0 0 0 1px #ffdb4d inset;}',
+    '.ym-gal-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#12141a;}',
+    '.ym-gal-badge{position:absolute;top:6px;left:6px;z-index:2;font-size:9.5px;font-weight:700;letter-spacing:.5px;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.62);color:#fff;text-transform:uppercase;pointer-events:none;}',
+    '.ym-gal-name{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:18px 8px 6px;font-size:10.5px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.82));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none;}',
+    '.ym-gal-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;color:rgba(255,255,255,.45);}',
+    '.ym-gal-busy{opacity:.55;pointer-events:none;}',
+    '.ym-gal-count{color:rgba(255,255,255,.35);font-weight:400;font-size:13px;}',
     '.ym-sliders{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px 20px;margin-top:8px;}',
     '.ym-ctl{min-width:0;}',
     '.ym-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:#d7dbe3;margin-top:8px;}',
@@ -508,10 +556,26 @@ ENGINE = r"""
             '<button class="ym-btn ghost ym-urlgo">Вставить</button>',
           '</div>',
           '<div class="ym-hint">JPG, PNG, WEBP, GIF, AVIF, BMP · MP4, WEBM, MOV · .zip (Wallpaper Engine) · .html-обои</div>',
-          '<button class="ym-btn ghost ym-folder" style="width:100%;margin-top:8px">Открыть папку с фонами</button>',
           '<label class="ym-switch-row"><span>Адаптивный фон — обложка играющего трека</span><input type="checkbox" class="ym-adapt"><span class="ym-switch"></span></label>',
+          '<div class="ym-fitrow"><span>Масштаб</span><div class="ym-chips">',
+            '<button class="ym-chip ym-fit" data-fit="smart" title="Вся картинка, по краям — её размытая копия">Умно</button>',
+            '<button class="ym-chip ym-fit" data-fit="cover" title="Заполнить экран, края обрезаются">Заполнить</button>',
+            '<button class="ym-chip ym-fit" data-fit="contain" title="Вся картинка, по краям чёрные поля">Вписать</button>',
+            '<button class="ym-chip ym-fit" data-fit="stretch" title="Растянуть на весь экран">Растянуть</button>',
+          '</div></div>',
         '</section>',
       '</div>',
+      '<section class="ym-card ym-gallery-card">',
+        '<div class="ym-card-head">',
+          '<div class="ym-card-title">Мои фоны <span class="ym-gal-count"></span></div>',
+          '<div class="ym-chips">',
+            '<button class="ym-chip ym-gal-refresh">Обновить</button>',
+            '<button class="ym-chip ym-folder">Открыть папку</button>',
+          '</div>',
+        '</div>',
+        '<div class="ym-gal-empty">В папке пока нет фонов — перетащи файл выше.</div>',
+        '<div class="ym-gal"></div>',
+      '</section>',
       '<section class="ym-card ym-settings">',
         '<div class="ym-card-head">',
           '<div class="ym-card-title">Настройки</div>',
@@ -677,8 +741,23 @@ ENGINE = r"""
     var dimV = q('.ym-dimv'), blurV = q('.ym-blurv'), brightV = q('.ym-brightv'), vigV = q('.ym-vigv'), navV = q('.ym-navv');
     var ptransV = q('.ym-ptransv'), pblurV = q('.ym-pblurv'), psatV = q('.ym-psatv');
     var adaptEl = q('.ym-adapt');
+    var fitBtns = page.querySelectorAll('.ym-fit');
+    var fit = String(cfg.fit || 'smart');
+    if(['smart','cover','contain','stretch'].indexOf(fit) === -1) fit = 'smart';
     var statusEl = q('.ym-status');
     var pushTimer = null;
+    var galEl = q('.ym-gal');
+    var galEmpty = q('.ym-gal-empty');
+    var galCount = q('.ym-gal-count');
+    var galObserver = null;
+    var galSeq = 0;
+    var openItem = String(cfg.file || '');
+
+    function markFit(){
+      for(var i = 0; i < fitBtns.length; i++){
+        fitBtns[i].classList.toggle('on', fitBtns[i].getAttribute('data-fit') === fit);
+      }
+    }
 
     function status(text, bad){
       statusEl.textContent = text || '';
@@ -711,6 +790,7 @@ ENGINE = r"""
         playerTransparency: Number(ptransEl.value),
         playerBlur: Number(pblurEl.value),
         playerSaturate: Number(psatEl.value),
+        fit: fit,
         adaptive: !!adaptEl.checked
       };
     }
@@ -762,6 +842,7 @@ ENGINE = r"""
 
     function afterWallpaper(r){
       adaptEl.checked = false;
+      loadLibrary();
       if(r.kind === 'web'){
         imgEl.style.display = 'none';
         videoEl.style.display = 'none';
@@ -792,6 +873,7 @@ ENGINE = r"""
         nameEl.textContent = r.file;
         dsub.textContent = fmtSize(r.bytes) + ' · ' + ext.slice(1).toUpperCase();
         status('Готово: ' + r.file + ' (' + fmtSize(r.bytes) + ')');
+        loadLibrary();
         setTimeout(function(){ showPreview(cfg.src, isVideo); }, 500);
       });
     }
@@ -826,6 +908,182 @@ ENGINE = r"""
       }).catch(function(){ status('Музыка не отвечает', true); });
     }
 
+    // ---------- галерея «Мои фоны» ----------
+    function mediaUrl(file){
+      return 'http://127.0.0.1:47823/media?t=' + encodeURIComponent(cfg.token || '') +
+             '&f=' + encodeURIComponent(file);
+    }
+    function thumbUrl(file){
+      return 'http://127.0.0.1:47823/thumb?t=' + encodeURIComponent(cfg.token || '') +
+             '&f=' + encodeURIComponent(file);
+    }
+    function galIcon(tile, text){
+      var ic = document.createElement('div');
+      ic.className = 'ym-gal-icon';
+      ic.textContent = text || '?';
+      tile.appendChild(ic);
+    }
+    function setActiveTile(name){
+      openItem = String(name || '');
+      var tiles = galEl.querySelectorAll('.ym-gal-tile');
+      for(var i = 0; i < tiles.length; i++){
+        tiles[i].classList.toggle('on', tiles[i].getAttribute('data-name') === openItem);
+      }
+    }
+    function useItem(it){
+      status('Применяю: ' + it.name + '…');
+      galEl.classList.add('ym-gal-busy');
+      fetch('http://127.0.0.1:47823/use', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        body: JSON.stringify({f: it.name})
+      })
+        .then(function(r){ return r.json(); })
+        .then(function(r){
+          galEl.classList.remove('ym-gal-busy');
+          if(!r || !r.ok){ status('Ошибка: ' + ((r && r.error) || 'неизвестно'), true); return; }
+          adaptEl.checked = false;
+          if(r.kind === 'web'){
+            imgEl.style.display = 'none';
+            videoEl.style.display = 'none';
+            nameEl.textContent = 'HTML-обои';
+            dsub.textContent = r.note || it.name;
+          } else if(r.file){
+            nameEl.textContent = r.file;
+            dsub.textContent = r.note || fmtSize(it.size);
+          }
+          setActiveTile(it.name);
+          status('Готово: ' + (r.note || it.name));
+          loadLibrary();
+        })
+        .catch(function(){
+          galEl.classList.remove('ym-gal-busy');
+          status('Музыка не отвечает', true);
+        });
+    }
+    function makeTile(it){
+      var tile = document.createElement('div');
+      tile.className = 'ym-gal-tile' + (it.active ? ' on' : '');
+      tile.setAttribute('data-name', it.name);
+      tile.title = it.name + (it.size ? ' · ' + fmtSize(it.size) : '');
+      var badge = document.createElement('div');
+      badge.className = 'ym-gal-badge';
+      badge.textContent = it.kind === 'video' ? 'Видео' :
+                          it.kind === 'archive' ? 'ZIP' :
+                          it.kind === 'html' ? 'HTML' : 'Фото';
+      tile.appendChild(badge);
+      var media = null;
+      if(it.kind === 'video'){
+        media = document.createElement('video');
+        media.className = 'ym-gal-thumb';
+        media.muted = true; media.loop = true; media.playsInline = true;
+        media.preload = 'metadata';
+        media.setAttribute('muted', '');
+        media.setAttribute('playsinline', '');
+        media.addEventListener('mouseenter', function(){ try{ var p = media.play(); if(p && p.catch) p.catch(function(){}); }catch(e){} });
+        media.addEventListener('mouseleave', function(){ try{ media.pause(); }catch(e){} });
+        tile.appendChild(media);
+      } else if(it.kind === 'image' || it.kind === 'archive'){
+        media = document.createElement('img');
+        media.className = 'ym-gal-thumb';
+        media.alt = '';
+        media.loading = 'lazy';
+        media.decoding = 'async';
+        media.addEventListener('error', function(){
+          if(!media) return;
+          if(media.getAttribute('data-full') === '1'){
+            if(media.parentNode) media.parentNode.removeChild(media);
+            galIcon(tile, '?');
+            return;
+          }
+          media.setAttribute('data-full', '1');
+          media.src = mediaUrl(it.name);
+        });
+        media.src = thumbUrl(it.name);
+        tile.appendChild(media);
+      } else {
+        galIcon(tile, 'HTML');
+      }
+      var label = document.createElement('div');
+      label.className = 'ym-gal-name';
+      label.textContent = it.name;
+      tile.appendChild(label);
+      tile.addEventListener('click', function(){ useItem(it); });
+      if(media && it.kind === 'video'){
+        if(galObserver) galObserver.observe(tile);
+        else media.src = mediaUrl(it.name) + '#t=0.2';
+      }
+      return tile;
+    }
+    function renderLibrary(items){
+      items = Array.isArray(items) ? items : [];
+      if(galObserver){ try{ galObserver.disconnect(); }catch(e){} galObserver = null; }
+      galEl.textContent = '';
+      galEmpty.style.display = items.length ? 'none' : 'block';
+      galCount.textContent = items.length ? '· ' + items.length : '';
+      try{
+        galObserver = new IntersectionObserver(function(entries){
+          for(var i = 0; i < entries.length; i++){
+            if(!entries[i].isIntersecting) continue;
+            var tile = entries[i].target;
+            var v = tile.querySelector('video');
+            if(v && !v.src) v.src = mediaUrl(tile.getAttribute('data-name')) + '#t=0.2';
+            galObserver.unobserve(tile);
+          }
+        }, {root: q('.ym-page-body'), threshold: 0.15});
+      }catch(e){ galObserver = null; }
+      for(var i = 0; i < items.length; i++) galEl.appendChild(makeTile(items[i]));
+    }
+    function loadLibrary(notify){
+      var seq = ++galSeq;
+      galEl.classList.add('ym-gal-busy');
+      fetch('http://127.0.0.1:47823/library', {
+        headers: {'x-ymbg-token': cfg.token || ''}
+      })
+        .then(function(r){ return r.json(); })
+        .then(function(r){
+          if(seq !== galSeq) return;
+          galEl.classList.remove('ym-gal-busy');
+          if(!r || !r.ok){ status('Не удалось прочитать папку', true); return; }
+          renderLibrary(r.items || []);
+          if(notify) status('Список обновлён');
+        })
+        .catch(function(){
+          if(seq !== galSeq) return;
+          galEl.classList.remove('ym-gal-busy');
+          status('Музыка не отвечает', true);
+        });
+    }
+    function openFolder(){
+      status('Открываю папку…');
+      fetch('http://127.0.0.1:47823/folder', {
+        method: 'GET',
+        headers: {'x-ymbg-token': cfg.token || ''}
+      })
+        .then(function(r){ return r.json(); })
+        .then(function(r){
+          if(r && r.ok) status('Папка открыта');
+          else status('Не удалось открыть папку', true);
+        })
+        .catch(function(){ status('Не удалось открыть папку', true); });
+    }
+    function onBgUpdate(e){
+      var d = e && e.detail ? e.detail : {};
+      if(d.fit){
+        fit = String(d.fit);
+        markFit();
+      }
+      if(d.file && d.src){
+        nameEl.textContent = d.file;
+        showPreview(d.src, !!d.isVideo);
+      } else if(d.web){
+        imgEl.style.display = 'none';
+        videoEl.style.display = 'none';
+        nameEl.textContent = 'HTML-обои';
+        dsub.textContent = /^https?:\/\//i.test(d.web) ? 'Веб-обои по ссылке' : 'Веб-обои из .zip';
+      }
+    }
+
     dimEl.value = cfg.dim; blurEl.value = cfg.blur; brightEl.value = cfg.brightness;
     vigEl.value = (cfg.vignette === undefined ? 0 : cfg.vignette);
     navEl.value = (cfg.navbarDim === undefined ? 0.35 : cfg.navbarDim);
@@ -843,6 +1101,9 @@ ENGINE = r"""
       if(cfg.src) showPreview(cfg.src, cfg.isVideo);
     }
     labels();
+    markFit();
+    loadLibrary();
+    window.addEventListener('ymbg:update', onBgUpdate);
 
     page.addEventListener('click', function(e){
       var chip = e.target && e.target.closest ? e.target.closest('.ym-preset') : null;
@@ -858,6 +1119,14 @@ ENGINE = r"""
       push(0);
       status('Пресет: ' + (chip.textContent || '').trim());
     });
+    for(var fi = 0; fi < fitBtns.length; fi++){
+      fitBtns[fi].addEventListener('click', function(){
+        fit = this.getAttribute('data-fit') || 'smart';
+        markFit();
+        push(0);
+        status('Масштаб: ' + (this.textContent || '').trim());
+      });
+    }
     q('.ym-close').addEventListener('click', closePanel);
     drop.addEventListener('click', function(){ fileInput.click(); });
     drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('over'); });
@@ -872,14 +1141,13 @@ ENGINE = r"""
     });
     urlEl.addEventListener('keydown', function(e){ if(e.key === 'Enter') applyUrl(); });
     q('.ym-urlgo').addEventListener('click', applyUrl);
-    q('.ym-folder').addEventListener('click', function(){
-      fetch('http://127.0.0.1:47823/folder', {
-        method: 'GET',
-        headers: {'x-ymbg-token': cfg.token || ''}
-      })
-        .then(function(r){ return r.json(); })
-        .then(function(r){ if(!r || !r.ok) status('Не удалось открыть папку', true); })
-        .catch(function(){ status('Не удалось открыть папку', true); });
+    var folderBtns = page.querySelectorAll('.ym-folder');
+    for(var fb = 0; fb < folderBtns.length; fb++){
+      folderBtns[fb].addEventListener('click', openFolder);
+    }
+    q('.ym-gal-refresh').addEventListener('click', function(){
+      status('Обновляю список…');
+      loadLibrary(true);
     });
     [dimEl, blurEl, brightEl, vigEl, navEl, ptransEl, pblurEl, psatEl].forEach(function(el){
       el.addEventListener('input', function(){ labels(); push(400); });
@@ -890,6 +1158,8 @@ ENGINE = r"""
       dimEl.value = 0.25; blurEl.value = 0; brightEl.value = 1; vigEl.value = 0; navEl.value = 0.35;
       ptransEl.value = 0.48; pblurEl.value = 20; psatEl.value = 1.15;
       adaptEl.checked = false;
+      fit = 'smart';
+      markFit();
       labels();
       push(0);
       status('Сброшено');
@@ -898,6 +1168,10 @@ ENGINE = r"""
     document.addEventListener('keydown', panelEsc);
     document.addEventListener('click', navGuard, true);
     window.addEventListener('resize', positionPage);
+    page.__ymCleanup = function(){
+      window.removeEventListener('ymbg:update', onBgUpdate);
+      if(galObserver){ try{ galObserver.disconnect(); }catch(e){} galObserver = null; }
+    };
     if(pageTimer) clearInterval(pageTimer);
     pageTimer = setInterval(function(){
       if(!document.getElementById('ym-page')){
@@ -914,6 +1188,7 @@ ENGINE = r"""
 
   function closePanel(){
     var el = document.getElementById('ym-page');
+    if(el && el.__ymCleanup){ try{ el.__ymCleanup(); }catch(e){} }
     if(el && el.parentNode) el.parentNode.removeChild(el);
     pageOpen = false;
     document.documentElement.classList.remove('ym-page-open');
@@ -1030,10 +1305,11 @@ function __ymBgToken(){
 function __ymBgSafeMediaPath(dir, name){
   const path = require('node:path');
   const base = path.basename(String(name || ''));
+  if(!base || base.charAt(0) === '.') return '';
   const ext = path.extname(base).toLowerCase();
   const allowed = ['.jpg','.jpeg','.png','.webp','.gif','.avif','.bmp',
                    '.mp4','.webm','.mov','.m4v','.ogv'];
-  if(!/^custom-background(?:-[a-z0-9]{1,16})?\.[a-z0-9]{1,6}$/i.test(base) || allowed.indexOf(ext) === -1) return '';
+  if(allowed.indexOf(ext) === -1) return '';
   const full = path.resolve(dir, base);
   const rel = path.relative(dir, full);
   if(!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
@@ -1099,6 +1375,7 @@ function __ymBgReadPayload(){
     web: String(__cfg.web || ''),
     webStamp: Number(__cfg.webStamp) || 0,
     webBase: __cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
+    fit: String(__cfg.fit || 'smart'),
     css: __css,
     blur: __cfg.blur,
     brightness: __cfg.brightness,
@@ -1121,6 +1398,7 @@ function __ymBgSettingsPayload(cfg){
     web: String(cfg.web || ''),
     webStamp: Number(cfg.webStamp) || 0,
     webBase: cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
+    fit: String(cfg.fit || 'smart'),
     blur: cfg.blur,
     brightness: cfg.brightness,
     dim: cfg.dim,
@@ -1218,17 +1496,132 @@ function __ymBgStartServer(){
     fs.writeFileSync(tmp, JSON.stringify(clampNumbers(cfg), null, 2), 'utf8');
     fs.renameSync(tmp, target);
   }
-  function cleanMedia(keep){
+  const VIDEO_EXT = ['.mp4','.webm','.mov','.m4v','.ogv'];
+  const IMAGE_EXT = ['.jpg','.jpeg','.png','.webp','.gif','.avif','.bmp'];
+  const LIB_EXT = IMAGE_EXT.concat(VIDEO_EXT, ['.zip','.html','.htm']);
+  const THUMB_DIR = path.join(dir, 'thumbs');
+
+  function cleanTmp(){
     try{
       fs.readdirSync(dir).forEach(function(n){
-        if(/^\.?custom-background(?:-[a-z0-9]{1,16})?\./i.test(n) && n !== keep){
-          const ext = path.extname(n).toLowerCase();
-          if(['.css', '.json', '.bak'].indexOf(ext) === -1){
-            try{ fs.unlinkSync(path.join(dir, n)); }catch(e){}
-          }
+        if(/^\.ymbg-tmp-/.test(n) || /^\.custom-background\.json\.tmp$/.test(n)){
+          try{ fs.unlinkSync(path.join(dir, n)); }catch(e){}
         }
       });
     }catch(e){}
+  }
+  function safeUserFile(name, exts){
+    const base = path.basename(String(name || ''));
+    if(!base || base.charAt(0) === '.') return '';
+    const ext = path.extname(base).toLowerCase();
+    if((exts || ALLOWED_EXT).indexOf(ext) === -1) return '';
+    const full = path.resolve(dir, base);
+    const rel = path.relative(dir, full);
+    if(!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
+    try{ if(!fs.statSync(full).isFile()) return ''; }catch(e){ return ''; }
+    return full;
+  }
+
+  // Загруженные архивы и HTML-обои больше не удаляем: они остаются в папке
+  // и попадают в галерею «Мои фоны».
+  function keepWallpaperCopy(src, ext){
+    const name = 'wallpaper-' + crypto.randomBytes(4).toString('hex') + ext;
+    const target = path.join(dir, name);
+    try{ fs.renameSync(src, target); }
+    catch(e){
+      fs.copyFileSync(src, target);
+      try{ fs.unlinkSync(src); }catch(_){}
+    }
+    return target;
+  }
+  function thumbDir(){
+    try{ fs.mkdirSync(THUMB_DIR, {recursive: true}); }catch(e){}
+    return THUMB_DIR;
+  }
+  function cacheKey(full){
+    const st = fs.statSync(full);
+    return crypto.createHash('sha1')
+      .update(full + '|' + st.size + '|' + Math.round(st.mtimeMs || 0))
+      .digest('hex');
+  }
+  function makeImageThumb(full){
+    let key = '';
+    try{ key = cacheKey(full); }catch(e){ return ''; }
+    const out = path.join(thumbDir(), key + '.jpg');
+    try{ if(fs.statSync(out).size > 0) return out; }catch(e){}
+    let img;
+    try{ img = require('electron').nativeImage.createFromPath(full); }
+    catch(e){ return ''; }
+    try{
+      if(!img || img.isEmpty()) return '';
+      const sz = img.getSize();
+      if(sz.width > 480) img = img.resize({width: 480, quality: 'good'});
+      const jpg = img.toJPEG(78);
+      if(!jpg || !jpg.length) return '';
+      fs.writeFileSync(out, jpg);
+      return out;
+    }catch(e){ return ''; }
+  }
+  function zipPreview(zipPath){
+    let key = '';
+    try{ key = cacheKey(zipPath); }catch(e){ return ''; }
+    const tdir = thumbDir();
+    const exts = ['.gif', '.jpg', '.png'];
+    for(let i = 0; i < exts.length; i++){
+      const p = path.join(tdir, key + exts[i]);
+      try{ if(fs.statSync(p).size > 0) return p; }catch(e){}
+    }
+    let st;
+    try{ st = fs.statSync(zipPath); }catch(e){ return ''; }
+    if(st.size > 256 * 1024 * 1024) return '';
+    try{
+      const buf = fs.readFileSync(zipPath);
+      const z = readZip(buf);
+      let pv = findEntry(z, 'preview.gif') || findEntry(z, 'preview.jpg') ||
+               findEntry(z, 'preview.jpeg') || findEntry(z, 'preview.png');
+      if(!pv){
+        const pics = z.filter(function(e){
+          return !e.dir && /\.(gif|jpe?g|png)$/i.test(e.name) && e.usize > 0 && e.usize < 12 * 1024 * 1024;
+        }).sort(function(a, b){ return b.usize - a.usize; });
+        pv = pics[0] || null;
+      }
+      if(!pv) return '';
+      const data = zipEntry(buf, pv);
+      const ext = path.extname(pv.name).toLowerCase();
+      const outExt = ext === '.png' ? '.png' : (ext === '.gif' ? '.gif' : '.jpg');
+      const target = path.join(tdir, key + outExt);
+      fs.writeFileSync(target, data);
+      return target;
+    }catch(e){ return ''; }
+  }
+  function libraryItems(){
+    const cfg = readCfg();
+    const activeFile = cfg.file ? path.basename(String(cfg.file)) : '';
+    const activeLib = cfg.lib ? path.basename(String(cfg.lib)) : '';
+    let names = [];
+    try{ names = fs.readdirSync(dir); }catch(e){ names = []; }
+    const out = [];
+    for(let i = 0; i < names.length; i++){
+      const name = names[i];
+      if(!name || name.charAt(0) === '.') continue;
+      const ext = path.extname(name).toLowerCase();
+      if(LIB_EXT.indexOf(ext) === -1) continue;
+      let st;
+      try{ st = fs.statSync(path.join(dir, name)); }catch(e){ continue; }
+      if(!st.isFile() || !st.size) continue;
+      const kind = VIDEO_EXT.indexOf(ext) !== -1 ? 'video' :
+                   IMAGE_EXT.indexOf(ext) !== -1 ? 'image' :
+                   (ext === '.zip' ? 'archive' : 'html');
+      out.push({
+        name: name,
+        kind: kind,
+        size: st.size,
+        mtime: Math.round(st.mtimeMs || st.mtime || 0),
+        active: activeLib ? (name === activeLib) : (name === activeFile)
+      });
+    }
+    out.sort(function(a, b){ return b.mtime - a.mtime; });
+    return out.slice(0, 300);
   }
   function extFromType(type){
     const t = String(type || '').toLowerCase().split(';')[0].trim();
@@ -1318,8 +1711,11 @@ function __ymBgStartServer(){
     stream.on('error', function(){ try{ res.destroy(); }catch(e){} });
     stream.pipe(res);
   }
+  function queryParam(req, name){
+    try{ return new URL(req.url, 'http://127.0.0.1').searchParams.get(name) || ''; }catch(e){ return ''; }
+  }
   function queryToken(req){
-    try{ return new URL(req.url, 'http://127.0.0.1').searchParams.get('t') || ''; }catch(e){ return ''; }
+    return queryParam(req, 't');
   }
 
   // ---------- приём файлов потоком (без base64 и без лимита 80 МБ) ----------
@@ -1356,6 +1752,28 @@ function __ymBgStartServer(){
     });
   }
 
+  function readJsonBody(req, max){
+    return new Promise(function(resolve, reject){
+      let chunks = [], total = 0, done = false;
+      req.on('data', function(c){
+        if(done) return;
+        total += c.length;
+        if(total > max){
+          done = true;
+          try{ req.destroy(); }catch(e){}
+          return reject(new Error('слишком большой запрос'));
+        }
+        chunks.push(c);
+      });
+      req.on('error', function(e){ if(!done){ done = true; reject(e); } });
+      req.on('end', function(){
+        if(done) return;
+        done = true;
+        try{ resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); }
+        catch(e){ reject(new Error('bad json')); }
+      });
+    });
+  }
   async function webToFile(resp, target, max){
     const out = fs.createWriteStream(target);
     const reader = resp.body && resp.body.getReader ? resp.body.getReader() : null;
@@ -1400,7 +1818,6 @@ function __ymBgStartServer(){
       fs.copyFileSync(tmpPath, target);
       try{ fs.unlinkSync(tmpPath); }catch(_){}
     }
-    try{ cleanMedia(name); }catch(e){}
     return {name: name, bytes: fs.statSync(target).size};
   }
 
@@ -1522,6 +1939,9 @@ function __ymBgStartServer(){
     const prefix = pj ? pj.name.slice(0, pj.name.lastIndexOf('/') + 1) : '';
     const type = String(project.type || '').toLowerCase();
     const entryName = String(project.file || '');
+    // Имя извлекаемого из архива файла привязано к содержимому архива:
+    // повторное применение того же .zip перезаписывает файл, а не плодит копии.
+    const zipKey = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 8);
 
     if(type === 'web'){
       const entry = installWebFromZip(buf, z, prefix, entryName);
@@ -1538,7 +1958,7 @@ function __ymBgStartServer(){
         const sniff = sniffExt(data);
         if(sniff && ALLOWED_EXT.indexOf(sniff) !== -1 && sniff !== ext &&
            !(sniff === '.mp4' && ext === '.m4v')) ext = sniff;
-        const w = writeMedia(data, ext);
+        const w = writeMedia(data, ext, 'custom-background-' + zipKey + ext);
         return {kind: 'media', file: w.name, bytes: w.bytes};
       }
     }
@@ -1553,7 +1973,7 @@ function __ymBgStartServer(){
     if(pv){
       const data = zipEntry(buf, pv);
       const ext = path.extname(pv.name).toLowerCase() === '.png' ? '.png' : (path.extname(pv.name).toLowerCase() === '.gif' ? '.gif' : '.jpg');
-      const w = writeMedia(data, ext);
+      const w = writeMedia(data, ext, 'custom-background-' + zipKey + ext);
       return {kind: 'media', file: w.name, bytes: w.bytes,
         note: 'Wallpaper Engine: сцену без движка не проиграть — поставил ' +
               (ext === '.gif' ? 'анимированное превью (GIF)' : 'превью картинкой')};
@@ -1683,8 +2103,16 @@ function __ymBgStartServer(){
       try{ st = fs.statSync(src); }catch(e){ throw new Error('файл не найден: ' + src); }
       if(!st.isFile()) throw new Error('это не файл');
       const ext = path.extname(src).toLowerCase();
-      if(ext === '.zip') return await handleWallpaperZip(src);
-      if(ext === '.html' || ext === '.htm') return {kind: 'web', web: installWebFile(src), note: 'HTML-обои'};
+      if(ext === '.zip'){
+        const tmpZip = tempPath('.zip');
+        fs.copyFileSync(src, tmpZip);
+        return await handleWallpaperZip(keepWallpaperCopy(tmpZip, '.zip'));
+      }
+      if(ext === '.html' || ext === '.htm'){
+        const tmpHtml = tempPath(ext);
+        fs.copyFileSync(src, tmpHtml);
+        return {kind: 'web', web: installWebFile(keepWallpaperCopy(tmpHtml, ext)), note: 'HTML-обои'};
+      }
       if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается: ' + ext);
       if(st.size > MAX) throw new Error('файл больше 2 ГБ');
       const tmp = tempPath(ext);
@@ -1864,13 +2292,12 @@ function __ymBgStartServer(){
     if(st.size > MAX) throw new Error('файл больше 2 ГБ');
     return {real: real, st: st};
   }
-  function writeMedia(buf, ext){
+  function writeMedia(buf, ext, name){
     if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается');
-    const name = mediaName(ext);
-    const target = path.join(dir, name);
+    const fileName = name || mediaName(ext);
+    const target = path.join(dir, fileName);
     fs.writeFileSync(target, buf);
-    try{ cleanMedia(name); }catch(e){}
-    return {name: name, bytes: buf.length};
+    return {name: fileName, bytes: buf.length};
   }
 
   async function handleApply(d){
@@ -1912,7 +2339,6 @@ function __ymBgStartServer(){
         mediaChanged = true;
         webNote = out.note || '';
         saved = 0;
-        try{ cleanMedia(''); }catch(e){}
       } else {
         cfg.web = '';
         fileName = out.file || '';
@@ -1934,6 +2360,7 @@ function __ymBgStartServer(){
 
     if(cfg.web && mediaChanged) cfg.file = '';
     else if(fileName) cfg.file = fileName;
+    if(mediaChanged) cfg.lib = '';
     Object.keys(NUMERIC).forEach(function(k){
       if(d[k] === undefined || d[k] === null || d[k] === '') return;
       const n = Number(d[k]);
@@ -1941,6 +2368,10 @@ function __ymBgStartServer(){
     });
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
     else if(mediaChanged) cfg.adaptive = false;
+    if(d.fit !== undefined){
+      const f = String(d.fit || '');
+      if(['smart','cover','contain','stretch'].indexOf(f) !== -1) cfg.fit = f;
+    }
     writeCfg(cfg);
 
     const payload = mediaChanged ? __ymBgReadPayload() : __ymBgSettingsPayload(cfg);
@@ -1974,19 +2405,52 @@ function __ymBgStartServer(){
     }
     if(req.method === 'GET' && u === '/folder'){
       if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      let err = '';
       try{
-        const { spawn } = require('node:child_process');
-        const child = spawn('explorer.exe', [dir], {detached: true, stdio: 'ignore', windowsHide: true});
-        child.unref();
-        return reply(res, 200, {ok: true});
+        const { shell } = require('electron');
+        if(shell && typeof shell.openPath === 'function'){
+          err = String(await shell.openPath(dir) || '');
+        } else {
+          err = 'no shell';
+        }
+      }catch(e){ err = String((e && e.message) || e); }
+      if(err){
+        try{
+          const { spawn } = require('node:child_process');
+          const child = spawn('explorer.exe', [dir], {detached: true, stdio: 'ignore', windowsHide: true});
+          child.on('error', function(){});
+          child.unref();
+          err = '';
+        }catch(e){ err = String((e && e.message) || e); }
+      }
+      if(err) return reply(res, 500, {ok: false, error: err});
+      return reply(res, 200, {ok: true, dir: dir});
+    }
+    if(req.method === 'GET' && u === '/library'){
+      if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      try{
+        return reply(res, 200, {ok: true, dir: dir, items: libraryItems()});
       }catch(e){
         return reply(res, 500, {ok: false, error: String((e && e.message) || e)});
       }
     }
+    if(req.method === 'GET' && u === '/thumb'){
+      if(!tokenEquals(queryToken(req), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const name = queryParam(req, 'f');
+      const full = safeUserFile(name, LIB_EXT);
+      if(!full) return reply(res, 404, {ok: false, error: 'not found'});
+      const ext = path.extname(full).toLowerCase();
+      let thumb = '';
+      if(ext === '.zip') thumb = zipPreview(full);
+      else if(VIDEO_EXT.indexOf(ext) === -1 && ext !== '.html' && ext !== '.htm') thumb = makeImageThumb(full);
+      if(!thumb) return reply(res, 404, {ok: false, error: 'no preview'});
+      return serveFile(req, res, thumb, thumb);
+    }
     if(req.method === 'GET' && u === '/media'){
       if(!tokenEquals(queryToken(req), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const want = queryParam(req, 'f');
       const cfg = readCfg();
-      const full = __ymBgSafeMediaPath(dir, cfg.file);
+      const full = want ? safeUserFile(want, ALLOWED_EXT) : __ymBgSafeMediaPath(dir, cfg.file);
       if(!full) return reply(res, 404, {ok: false, error: 'no media'});
       return serveFile(req, res, full, full);
     }
@@ -2024,10 +2488,10 @@ function __ymBgStartServer(){
           try{ name = decodeURIComponent(name); }catch(e){}
           const ext = path.extname(name).toLowerCase();
           if(ext === '.html' || ext === '.htm'){
-            const entry = installWebFile(tmp);
-            out = {kind: 'web', web: entry, bytes: saved.bytes, note: 'HTML-обои'};
+            const kept = keepWallpaperCopy(tmp, ext);
+            out = {kind: 'web', web: installWebFile(kept), bytes: saved.bytes, note: 'HTML-обои'};
           } else if(ext === '.zip'){
-            out = handleWallpaperZip(tmp);
+            out = handleWallpaperZip(keepWallpaperCopy(tmp, '.zip'));
           } else {
             const sniff = sniffExt(saved.head) || (ALLOWED_EXT.indexOf(ext) !== -1 ? ext : '');
             if(!sniff) throw new Error('формат не поддерживается');
@@ -2048,15 +2512,53 @@ function __ymBgStartServer(){
           cfg.web = String(out.web || '');
           cfg.file = '';
           cfg.webStamp = Date.now();
-          try{ cleanMedia(''); }catch(e){}
         }
         else { cfg.web = ''; cfg.file = out.file; }
+        cfg.lib = '';
         writeCfg(cfg);
         __ymBgBroadcast(__ymBgReadPayload());
         try{ if(fs.existsSync(tmp)) fs.unlinkSync(tmp); }catch(e){}
         return reply(res, 200, Object.assign({ok: true}, out));
       }catch(e){
         try{ if(fs.existsSync(tmp)) fs.unlinkSync(tmp); }catch(_){}
+        return reply(res, 400, {ok: false, error: String((e && e.message) || e)});
+      }
+    }
+
+    if(req.method === 'POST' && u === '/use'){
+      if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const ct = String(req.headers['content-type'] || '').toLowerCase();
+      if(ct.indexOf('application/json') !== 0) return reply(res, 415, {ok: false, error: 'нужен application/json'});
+      let body;
+      try{ body = await readJsonBody(req, 256 * 1024); }
+      catch(e){ return reply(res, 400, {ok: false, error: String((e && e.message) || e)}); }
+      const name = path.basename(String((body && body.f) || ''));
+      const full = safeUserFile(name, LIB_EXT);
+      if(!full) return reply(res, 400, {ok: false, error: 'файл не найден в папке фонов'});
+      try{
+        const ext = path.extname(full).toLowerCase();
+        let out = {kind: 'media', file: name};
+        if(ext === '.zip'){
+          out = await handleWallpaperZip(full);
+        } else if(ext === '.html' || ext === '.htm'){
+          out = {kind: 'web', web: installWebFile(full), note: 'HTML-обои'};
+        }
+        const cfg = readCfg();
+        cfg.adaptive = false;
+        cfg.webStamp = Date.now();
+        if(out.kind === 'web'){
+          cfg.web = String(out.web || '');
+          cfg.file = '';
+        } else {
+          cfg.web = '';
+          cfg.file = out.file || name;
+        }
+        cfg.lib = name;
+        writeCfg(cfg);
+        __ymBgBroadcast(__ymBgReadPayload());
+        return reply(res, 200, {ok: true, kind: cfg.web ? 'web' : 'media',
+          file: cfg.web ? '' : cfg.file, web: cfg.web || '', note: out.note || ''});
+      }catch(e){
         return reply(res, 400, {ok: false, error: String((e && e.message) || e)});
       }
     }
@@ -2101,7 +2603,7 @@ function __ymBgStartServer(){
   srv.on('error', function(e){
     try{ console.error('[ymbg] server error:', (e && e.message) || e); }catch(_){}
   });
-  try{ cleanMedia(path.basename(String(readCfg().file || ''))); }catch(e){}
+  try{ cleanTmp(); }catch(e){}
   try{ srv.listen(PORT, '127.0.0.1'); }
   catch(e){ try{ console.error('[ymbg] listen failed:', (e && e.message) || e); }catch(_){} }
 }
