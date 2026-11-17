@@ -49,7 +49,7 @@ if ($allowed -notcontains $ext) {
 }
 
 $size = (Get-Item -LiteralPath $src).Length
-if ($size -gt 80MB) { throw ("Файл слишком большой: {0:N1} МБ (максимум 80 МБ)" -f ($size / 1MB)) }
+if ($size -gt 2GB) { throw ("Файл слишком большой: {0:N1} МБ (максимум 2 ГБ)" -f ($size / 1MB)) }
 if ($size -le 0) { throw "Файл пустой" }
 
 New-Item -ItemType Directory -Force -Path $userDir | Out-Null
@@ -64,7 +64,7 @@ if (-not ($src -eq $dst)) {
 }
 
 # Убираем прежние фоны только после успешной замены.
-Get-ChildItem -LiteralPath $userDir -Filter "custom-background.*" -File -ErrorAction SilentlyContinue |
+Get-ChildItem -LiteralPath $userDir -Filter "custom-background*" -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Extension -notin @(".css", ".json", ".bak") -and $_.FullName -ne $dst } |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
@@ -87,6 +87,7 @@ if (-not $cfg) {
     }
 }
 $cfg.file = $fileName
+$cfg.web = ""
 $cfg.adaptive = $false
 $tmpJson = "$jsonPath.tmp"
 [IO.File]::WriteAllText($tmpJson, ($cfg | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))

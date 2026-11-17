@@ -143,7 +143,7 @@ if (Test-Path -LiteralPath $legacyToken) {
 }
 
 # --- Картинка ---
-$images = @(Get-ChildItem $userDir -Filter "custom-background.*" -ErrorAction SilentlyContinue |
+$images = @(Get-ChildItem $userDir -Filter "custom-background*" -ErrorAction SilentlyContinue |
     Where-Object { $_.Extension -notin ".css", ".json", ".bak" })
 
 if ($Image) {
@@ -154,12 +154,13 @@ if ($Image) {
                     ".mp4", ".webm", ".mov", ".m4v", ".ogv")
     if ($allowedExt -notcontains $ext) { throw "Unsupported image format: $ext" }
     $size = (Get-Item -LiteralPath $resolved).Length
-    if ($size -gt 80MB) { throw "Image is larger than 80 MB" }
+    if ($size -gt 2GB) { throw "Image is larger than 2 GB" }
     $images | Remove-Item -Force -ErrorAction SilentlyContinue
     $fileName = "custom-background" + $ext
     Copy-Item $resolved (Join-Path $userDir $fileName) -Force
     $cfg = Get-Content $jsonDst -Raw -Encoding UTF8 | ConvertFrom-Json
     $cfg.file = $fileName
+    $cfg.web = ""
     $cfg.adaptive = $false
     $jsonText = $cfg | ConvertTo-Json -Depth 5
     $tmpJson = "$jsonDst.tmp"

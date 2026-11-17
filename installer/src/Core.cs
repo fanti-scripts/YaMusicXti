@@ -309,7 +309,7 @@ namespace YMBG
         {
             try
             {
-                foreach (string path in Directory.GetFiles(dir, "custom-background.*"))
+                foreach (string path in Directory.GetFiles(dir, "custom-background*"))
                 {
                     string ext = Path.GetExtension(path).ToLowerInvariant();
                     if (ext == ".css" || ext == ".json" || ext == ".bak")
@@ -352,7 +352,7 @@ namespace YMBG
             {
                 return;
             }
-            foreach (string path in Directory.GetFiles(dir, "custom-background.*"))
+            foreach (string path in Directory.GetFiles(dir, "custom-background*"))
             {
                 try
                 {
@@ -361,6 +361,17 @@ namespace YMBG
                 catch
                 {
                 }
+            }
+            try
+            {
+                string web = Path.Combine(dir, "web-wallpaper");
+                if (Directory.Exists(web))
+                {
+                    Directory.Delete(web, true);
+                }
+            }
+            catch
+            {
             }
         }
 

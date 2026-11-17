@@ -35,6 +35,9 @@ ENGINE = r"""
     fade: (C.fade === undefined || C.fade === null) ? 600 : Number(C.fade),
     poll: Number(C.poll) || 1500,
     file: C.file || '',
+    web: C.web || '',
+    webBase: C.webBase || '',
+    webStamp: Number(C.webStamp) || 0,
     token: C.token || ''
   };
 
@@ -48,6 +51,7 @@ ENGINE = r"""
     '#ym-bg .ym-layer.active{opacity:1;}',
     '#ym-bg .ym-media{width:100%;height:100%;object-fit:cover;object-position:center;display:block;',
       'filter:brightness(var(--ym-bright)) blur(var(--ym-blur));transform:scale(1.02) translateZ(0);}',
+    '#ym-bg iframe.ym-media{border:0;background:transparent;}',
     '#ym-bg .ym-shade{position:absolute;inset:0;background:rgba(0,0,0,var(--ym-dim));}',
     '#ym-bg .ym-vignette{position:absolute;inset:0;opacity:var(--ym-vig);',
       'background:radial-gradient(ellipse at center,rgba(0,0,0,0) 40%,rgba(0,0,0,.75) 100%);}',
@@ -275,23 +279,59 @@ ENGINE = r"""
     layer.appendChild(el);
   }
 
+  function setWeb(layer, url){
+    if(!layer) return;
+    layer.textContent = '';
+    var f = document.createElement('iframe');
+    f.className = 'ym-media';
+    f.setAttribute('allow', 'autoplay; fullscreen; encrypted-media');
+    f.setAttribute('referrerpolicy', 'no-referrer');
+    f.src = url;
+    layer.appendChild(f);
+  }
+
+  function webSrc(){
+    if(!cfg.web) return '';
+    if(/^https?:\/\//i.test(cfg.web)) return cfg.web;
+    var rel = String(cfg.web).split('/').filter(function(x){ return x; })
+      .map(function(x){ return encodeURIComponent(x); }).join('/');
+    var u = (cfg.webBase || '') + rel;
+    // Метка сборки: после замены HTML-файла iframe должен перезагрузиться,
+    // даже если имя файла осталось прежним.
+    if(cfg.webStamp) u += '?v=' + encodeURIComponent(cfg.webStamp);
+    return u;
+  }
+
   var currentUrl = null;
-  function apply(url, isVideo){
-    if(!url || url === currentUrl) return;
+  var currentWeb = false;
+  function apply(url, isVideo, isWeb){
+    if(!url) return;
+    if(url === currentUrl && !!isWeb === currentWeb) return;
     var r = ensureRoot(); if(!r) return;
     var layers = r.querySelectorAll('.ym-layer');
     if(layers.length < 2) return;
     var active = r.querySelector('.ym-layer.active');
     var inactive = (active === layers[0]) ? layers[1] : layers[0];
-    setMedia(inactive, url, isVideo);
+    try{
+      if(isWeb) setWeb(inactive, url);
+      else setMedia(inactive, url, isVideo);
+    }catch(e){ return; }
     currentUrl = url;
-    requestAnimationFrame(function(){
+    currentWeb = !!isWeb;
+    // requestAnimationFrame в свёрнутом/перекрытом окне может не сработать,
+    // поэтому подстраховываемся таймером — иначе новый фон остаётся в скрытом слое.
+    var swapped = false;
+    function swap(){
+      if(swapped) return;
+      swapped = true;
       inactive.classList.add('active');
       if(active) active.classList.remove('active');
       setTimeout(function(){
         if(active && !active.classList.contains('active')) active.textContent = '';
       }, cfg.fade + 120);
-    });
+    }
+    requestAnimationFrame(swap);
+    setTimeout(swap, 150);
   }
 
   function clearMedia(){
@@ -302,6 +342,7 @@ ENGINE = r"""
       layers[i].textContent = '';
     }
     currentUrl = null;
+    currentWeb = false;
     lastCover = null;
   }
 
@@ -347,11 +388,15 @@ ENGINE = r"""
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
     if(d.css !== undefined) cfg.css = String(d.css || '');
     if(d.file !== undefined) cfg.file = String(d.file || '');
+    if(d.web !== undefined) cfg.web = String(d.web || '');
+    if(d.webBase !== undefined) cfg.webBase = String(d.webBase || '');
+    if(d.webStamp !== undefined) cfg.webStamp = Number(d.webStamp) || 0;
     if(d.src !== undefined){
       cfg.src = String(d.src || '');
       cfg.isVideo = !!d.isVideo;
-      currentUrl = null;
     }
+    // currentUrl не сбрасываем: apply() сам сравнит адрес. Иначе смена
+    // любого ползунка перезапускала бы видео с начала.
     STYLE = buildStyle();
     ensureStyle();
     var r = ensureRoot();
@@ -362,12 +407,15 @@ ENGINE = r"""
       r.style.setProperty('--ym-vig', cfg.vignette);
       r.style.setProperty('--ym-nav', cfg.navbarDim);
     }
+    var wu = webSrc();
     setAdaptiveWatchers(cfg.adaptive);
     if(cfg.adaptive){
       lastCover = null;
       tick();
+    } else if(wu){
+      apply(wu, false, true);
     } else if(cfg.src){
-      apply(cfg.src, cfg.isVideo);
+      apply(cfg.src, cfg.isVideo, false);
     } else {
       clearMedia();
     }
@@ -451,15 +499,15 @@ ENGINE = r"""
         '<section class="ym-card">',
           '<div class="ym-card-title">Свой фон</div>',
           '<div class="ym-drop">',
-            '<div class="ym-dtitle">Перетащи картинку, GIF или видео</div>',
+            '<div class="ym-dtitle">Перетащи картинку, GIF, видео или .zip</div>',
             '<div class="ym-dsub">или нажми, чтобы выбрать файл</div>',
-            '<input type="file" accept="image/*,video/*" style="display:none">',
+            '<input type="file" accept="image/*,video/*,.zip,.html,.htm" style="display:none">',
           '</div>',
           '<div class="ym-urlrow">',
-            '<input class="ym-input ym-url" placeholder="Прямая ссылка на видео или гифку">',
-            '<button class="ym-btn ghost ym-urlgo">По ссылке</button>',
+            '<input class="ym-input ym-url" placeholder="Ссылка на обои, страница или HTML-код">',
+            '<button class="ym-btn ghost ym-urlgo">Вставить</button>',
           '</div>',
-          '<div class="ym-hint">JPG, PNG, WEBP, GIF, AVIF, BMP · MP4, WEBM, MOV · до 80 МБ</div>',
+          '<div class="ym-hint">JPG, PNG, WEBP, GIF, AVIF, BMP · MP4, WEBM, MOV · .zip (Wallpaper Engine) · .html-обои</div>',
           '<button class="ym-btn ghost ym-folder" style="width:100%;margin-top:8px">Открыть папку с фонами</button>',
           '<label class="ym-switch-row"><span>Адаптивный фон — обложка играющего трека</span><input type="checkbox" class="ym-adapt"><span class="ym-switch"></span></label>',
         '</section>',
@@ -688,55 +736,90 @@ ENGINE = r"""
       }
     }
 
+    function uploadTo(path, file, onDone){
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'http://127.0.0.1:47823' + path, true);
+      xhr.setRequestHeader('x-ymbg-token', cfg.token || '');
+      xhr.setRequestHeader('x-ymbg-name', encodeURIComponent(file.name || 'file'));
+      xhr.upload.onprogress = function(e){
+        if(e.lengthComputable) status('Загрузка ' + Math.round(e.loaded / e.total * 100) + '%…');
+      };
+      xhr.onload = function(){
+        var r = {};
+        try{ r = JSON.parse(xhr.responseText || '{}'); }catch(e){}
+        if(xhr.status === 200 && r.ok) onDone(r);
+        else status('Ошибка: ' + ((r && r.error) || ('HTTP ' + xhr.status)), true);
+      };
+      xhr.onerror = function(){ status('Музыка не отвечает', true); };
+      status('Отправляю…');
+      xhr.send(file);
+    }
+
+    function fmtSize(b){
+      b = Number(b) || 0;
+      return b >= 1048576 ? (b / 1048576).toFixed(1) + ' МБ' : Math.max(1, Math.round(b / 1024)) + ' КБ';
+    }
+
+    function afterWallpaper(r){
+      adaptEl.checked = false;
+      if(r.kind === 'web'){
+        imgEl.style.display = 'none';
+        videoEl.style.display = 'none';
+        nameEl.textContent = 'HTML-обои';
+        dsub.textContent = r.note || 'Веб-обои';
+        status(r.note || 'Готово: веб-обои');
+        return;
+      }
+      nameEl.textContent = r.file || 'Фон';
+      dsub.textContent = r.note || fmtSize(r.bytes);
+      status(r.note || ('Готово: ' + (r.file || '')));
+      setTimeout(function(){ showPreview(cfg.src, cfg.isVideo); }, 500);
+    }
+
     function takeFile(f){
       var name = f.name || 'file';
       var ext = ('.' + name.split('.').pop()).toLowerCase();
+      if(ext === '.zip' || ext === '.html' || ext === '.htm'){
+        status(ext === '.zip' ? 'Разбираю архив…' : 'Ставлю HTML-обои…');
+        uploadTo('/wallpaper', f, afterWallpaper);
+        return;
+      }
       var okExt = ['.jpg','.jpeg','.png','.webp','.gif','.avif','.bmp','.mp4','.webm','.mov','.m4v','.ogv'];
       if(okExt.indexOf(ext) === -1){ status('Формат не поддерживается: ' + ext, true); return; }
-      if(f.size > 80 * 1024 * 1024){ status('Файл больше 80 МБ', true); return; }
+      if(f.size > 2 * 1024 * 1024 * 1024){ status('Файл больше 2 ГБ', true); return; }
       var isVideo = ['.mp4','.webm','.mov','.m4v','.ogv'].indexOf(ext) !== -1;
-      status('Читаю файл…');
-      var reader = new FileReader();
-      reader.onload = function(){
-        var uri = String(reader.result || '');
-        updateAll({src: uri, isVideo: isVideo, adaptive: false});
-        adaptEl.checked = false;
-        nameEl.textContent = name;
-        dsub.textContent = (f.size / 1048576).toFixed(1) + ' МБ · ' + ext.slice(1).toUpperCase();
-        showPreview(uri, isVideo);
-        status('Сохраняю…');
-        var body = currentCfg();
-        body.dataUri = uri;
-        body.name = name;
-        panelApi(body).then(function(r){
-          if(r && r.ok){
-            nameEl.textContent = r.file;
-            status('Готово: ' + r.file + ' (' + (r.bytes / 1048576).toFixed(1) + ' МБ)');
-          } else {
-            status('Ошибка: ' + ((r && r.error) || 'неизвестно'), true);
-          }
-        }).catch(function(){ status('Музыка не отвечает', true); });
-      };
-      reader.onerror = function(){ status('Не удалось прочитать файл', true); };
-      reader.readAsDataURL(f);
+      uploadTo('/upload', f, function(r){
+        nameEl.textContent = r.file;
+        dsub.textContent = fmtSize(r.bytes) + ' · ' + ext.slice(1).toUpperCase();
+        status('Готово: ' + r.file + ' (' + fmtSize(r.bytes) + ')');
+        setTimeout(function(){ showPreview(cfg.src, isVideo); }, 500);
+      });
     }
 
     function applyUrl(){
-      var u = urlEl.value.trim();
-      if(!/^https?:\/\//i.test(u)){ status('Нужна ссылка http(s)://', true); return; }
-      status('Скачиваю…');
-      // Ссылка задаёт конкретный файл: адаптивный режим выключаем сразу,
-      // иначе после скачивания фоном останется обложка трека, а не новый файл.
+      var raw = urlEl.value.trim();
+      if(!raw){ status('Вставь ссылку или HTML-код', true); return; }
+      status('Разбираю…');
+      // Ссылка задаёт конкретный фон: адаптивный режим выключаем сразу,
+      // иначе после загрузки фоном останется обложка трека, а не новый файл.
       adaptEl.checked = false;
       updateAll({adaptive:false});
       var body = currentCfg();
-      body.url = u;
+      body.url = raw;
       panelApi(body).then(function(r){
         if(r && r.ok){
-          nameEl.textContent = r.file;
-          status('Готово: ' + r.file + ' (' + (r.bytes / 1048576).toFixed(1) + ' МБ)');
-          dsub.textContent = 'Скачано по ссылке';
-          setTimeout(function(){ showPreview(cfg.src, r.isVideo); }, 500);
+          if(r.kind === 'web'){
+            imgEl.style.display = 'none';
+            videoEl.style.display = 'none';
+            nameEl.textContent = 'HTML-обои';
+            dsub.textContent = r.note || 'Веб-обои';
+            status(r.note || 'Готово: веб-обои');
+          } else {
+            nameEl.textContent = r.file || 'Фон';
+            dsub.textContent = r.note || 'Скачано по ссылке';
+            status(r.note || ('Готово: ' + (r.file || '')));
+            setTimeout(function(){ showPreview(cfg.src, r.isVideo); }, 600);
+          }
         } else {
           status('Ошибка: ' + ((r && r.error) || 'неизвестно'), true);
         }
@@ -750,8 +833,15 @@ ENGINE = r"""
     pblurEl.value = (cfg.playerBlur === undefined ? 20 : cfg.playerBlur);
     psatEl.value = (cfg.playerSaturate === undefined ? 1.15 : cfg.playerSaturate);
     adaptEl.checked = !!cfg.adaptive;
-    if(cfg.file) nameEl.textContent = cfg.file;
-    if(cfg.src) showPreview(cfg.src, cfg.isVideo);
+    if(cfg.web){
+      nameEl.textContent = 'HTML-обои';
+      dsub.textContent = /^https?:\/\//i.test(cfg.web) ? 'Веб-обои по ссылке' : 'Веб-обои из .zip';
+      imgEl.style.display = 'none';
+      videoEl.style.display = 'none';
+    } else {
+      if(cfg.file) nameEl.textContent = cfg.file;
+      if(cfg.src) showPreview(cfg.src, cfg.isVideo);
+    }
     labels();
 
     page.addEventListener('click', function(e){
@@ -841,11 +931,16 @@ ENGINE = r"""
     if(!cfg.adaptive) return;
     var u = coverUrl();
     if(u){
-      if(u !== lastCover){ lastCover = u; apply(u, false); }
+      if(u !== lastCover){ lastCover = u; apply(u, false, false); }
+      return;
+    }
+    // Ничего не играет — оставляем пользовательский фон вместо пустого экрана.
+    lastCover = null;
+    var wu = webSrc();
+    if(wu){
+      if(currentUrl !== wu) apply(wu, false, true);
     } else if(cfg.src && currentUrl !== cfg.src){
-      // Ничего не играет — оставляем пользовательский фон вместо пустого экрана.
-      lastCover = null;
-      apply(cfg.src, cfg.isVideo);
+      apply(cfg.src, cfg.isVideo, false);
     }
   }
 
@@ -880,12 +975,16 @@ ENGINE = r"""
     ensureRoot();
     ensureNav();
     setInterval(ensureNav, 400);
+    var wu = webSrc();
     if(cfg.adaptive){
       var c = coverUrl();
-      if(c){ lastCover = c; apply(c, false); }
-      else if(cfg.src){ apply(cfg.src, cfg.isVideo); }
+      if(c){ lastCover = c; apply(c, false, false); }
+      else if(wu){ apply(wu, false, true); }
+      else if(cfg.src){ apply(cfg.src, cfg.isVideo, false); }
+    } else if(wu){
+      apply(wu, false, true);
     } else if(cfg.src){
-      apply(cfg.src, cfg.isVideo);
+      apply(cfg.src, cfg.isVideo, false);
     }
 
     if(cfg.adaptive){
@@ -900,7 +999,8 @@ ENGINE = r"""
         ensureStyle();
         ensureRoot();
         if(cfg.adaptive) tick();
-        else if(cfg.src) apply(cfg.src, cfg.isVideo);
+        else if(webSrc()) apply(webSrc(), false, true);
+        else if(cfg.src) apply(cfg.src, cfg.isVideo, false);
       }
     }, 3000);
   }
@@ -933,7 +1033,7 @@ function __ymBgSafeMediaPath(dir, name){
   const ext = path.extname(base).toLowerCase();
   const allowed = ['.jpg','.jpeg','.png','.webp','.gif','.avif','.bmp',
                    '.mp4','.webm','.mov','.m4v','.ogv'];
-  if(!/^custom-background\.[a-z0-9]{1,6}$/i.test(base) || allowed.indexOf(ext) === -1) return '';
+  if(!/^custom-background(?:-[a-z0-9]{1,16})?\.[a-z0-9]{1,6}$/i.test(base) || allowed.indexOf(ext) === -1) return '';
   const full = path.resolve(dir, base);
   const rel = path.relative(dir, full);
   if(!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
@@ -967,7 +1067,6 @@ function __ymBgReadPayload(){
   const __fileBase = __path.basename(__fileRaw);
   const __file = __ymBgSafeMediaPath(__dir, __fileBase) ? __fileBase : '';
   const __info = __ymBgMediaInfo(__file);
-  const __maxBytes = 80 * 1024 * 1024;
   const __full = __file ? __ymBgSafeMediaPath(__dir, __file) : '';
 
   let __src = '';
@@ -975,10 +1074,12 @@ function __ymBgReadPayload(){
   try{
     if(!__full) throw new Error('no media');
     const __st = __fs.statSync(__full);
-    if(__st.isFile() && __st.size > 0 && __st.size <= __maxBytes){
+    if(__st.isFile() && __st.size > 0){
       __isVideo = __info.isVideo;
-      const __mime = __info.mime || (__isVideo ? 'video/mp4' : 'image/jpeg');
-      __src = 'data:' + __mime + ';base64,' + __fs.readFileSync(__full).toString('base64');
+      // Отдаём файл локальным сервером (с Range), а не data:-строкой:
+      // так видео любого размера не раздувается в renderer и не ест память.
+      __src = 'http://127.0.0.1:47823/media?t=' + encodeURIComponent(__ymBgToken()) +
+              '&v=' + Math.round(__st.mtimeMs || Date.now());
     }
   }catch(e){ __src = ''; __isVideo = false; }
 
@@ -995,6 +1096,9 @@ function __ymBgReadPayload(){
     adaptive: !!__cfg.adaptive,
     src: __src,
     isVideo: __isVideo,
+    web: String(__cfg.web || ''),
+    webStamp: Number(__cfg.webStamp) || 0,
+    webBase: __cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
     css: __css,
     blur: __cfg.blur,
     brightness: __cfg.brightness,
@@ -1014,6 +1118,9 @@ function __ymBgReadPayload(){
 function __ymBgSettingsPayload(cfg){
   return {
     adaptive: !!cfg.adaptive,
+    web: String(cfg.web || ''),
+    webStamp: Number(cfg.webStamp) || 0,
+    webBase: cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
     blur: cfg.blur,
     brightness: cfg.brightness,
     dim: cfg.dim,
@@ -1046,13 +1153,28 @@ function __ymBgStartServer(){
   const fs = require('node:fs');
   const path = require('node:path');
   const crypto = require('node:crypto');
+  const zlib = require('node:zlib');
   const net = require('node:net');
   const dns = require('node:dns').promises;
   const dir = __ymBgUserDir();
   const PORT = 47823;
-  const MAX = 80 * 1024 * 1024;
+  const MAX = 2048 * 1024 * 1024;      // 2 ГБ: видео больше не упирается в 80 МБ
+  const MAX_ZIP = 1024 * 1024 * 1024;  // архив обоев
+  const MAX_JSON = 8 * 1024 * 1024;    // обычные настройки
   const ALLOWED_ORIGIN = 'music-application://desktop';
   const ALLOWED_EXT = ['.jpg','.png','.webp','.gif','.avif','.bmp','.mp4','.webm','.mov','.m4v','.ogv'];
+  const WEB_DIR = path.join(dir, 'web-wallpaper');
+  const MIME = {
+    '.html':'text/html; charset=utf-8', '.htm':'text/html; charset=utf-8',
+    '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8',
+    '.css':'text/css; charset=utf-8', '.json':'application/json; charset=utf-8',
+    '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.webp':'image/webp',
+    '.gif':'image/gif', '.avif':'image/avif', '.bmp':'image/bmp', '.svg':'image/svg+xml',
+    '.mp4':'video/mp4', '.webm':'video/webm', '.mov':'video/quicktime', '.m4v':'video/mp4',
+    '.ogv':'video/ogg', '.mp3':'audio/mpeg', '.ogg':'audio/ogg', '.wav':'audio/wav',
+    '.woff':'font/woff', '.woff2':'font/woff2', '.ttf':'font/ttf', '.otf':'font/otf',
+    '.wasm':'application/wasm', '.glsl':'text/plain; charset=utf-8', '.txt':'text/plain; charset=utf-8'
+  };
   const NUMERIC = {
     dim: [0, 0.9], blur: [0, 40], brightness: [0.2, 1.6], vignette: [0, 1],
     navbarDim: [0, 0.8], playerTransparency: [0, 0.95], playerBlur: [0, 40],
@@ -1099,7 +1221,7 @@ function __ymBgStartServer(){
   function cleanMedia(keep){
     try{
       fs.readdirSync(dir).forEach(function(n){
-        if(/^\.?custom-background\./i.test(n) && n !== keep){
+        if(/^\.?custom-background(?:-[a-z0-9]{1,16})?\./i.test(n) && n !== keep){
           const ext = path.extname(n).toLowerCase();
           if(['.css', '.json', '.bak'].indexOf(ext) === -1){
             try{ fs.unlinkSync(path.join(dir, n)); }catch(e){}
@@ -1146,6 +1268,473 @@ function __ymBgStartServer(){
   function hostAllowed(req){
     const h = String(req.headers.host || '').toLowerCase();
     return h === '127.0.0.1:47823' || h === 'localhost:47823';
+  }
+
+  // ---------- общая раздача файлов (Range нужен для больших видео) ----------
+  function mimeOf(name){
+    return MIME[path.extname(String(name || '')).toLowerCase()] || 'application/octet-stream';
+  }
+  function safeWebPath(rel){
+    const base = path.resolve(WEB_DIR);
+    const full = path.resolve(base, String(rel || '').replace(/^[/\\]+/, ''));
+    const r = path.relative(base, full);
+    if(!r || r.startsWith('..') || path.isAbsolute(r)) return '';
+    return full;
+  }
+  function serveFile(req, res, full, name){
+    let st;
+    try{ st = fs.statSync(full); }catch(e){ return reply(res, 404, {ok:false, error:'not found'}); }
+    if(!st.isFile()) return reply(res, 404, {ok:false, error:'not found'});
+    const headers = {
+      'Content-Type': mimeOf(name || full),
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff'
+    };
+    if(res.__ymOrigin === ALLOWED_ORIGIN){
+      headers['Access-Control-Allow-Origin'] = ALLOWED_ORIGIN;
+      headers['Vary'] = 'Origin';
+      headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, Accept-Ranges';
+    }
+    let start = 0, end = st.size - 1, code = 200;
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || '').trim());
+    if(m && st.size > 0 && !(m[1] === '' && m[2] === '')){
+      if(m[1] === '') start = Math.max(0, st.size - Number(m[2]));
+      else {
+        start = Number(m[1]);
+        if(m[2] !== '') end = Math.min(st.size - 1, Number(m[2]));
+      }
+      if(!Number.isFinite(start) || start > end || start >= st.size){
+        res.writeHead(416, {'Content-Range': 'bytes */' + st.size, 'Content-Length': '0'});
+        return res.end();
+      }
+      code = 206;
+      headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + st.size;
+    }
+    headers['Content-Length'] = String(Math.max(0, end - start + 1));
+    res.writeHead(code, headers);
+    if(req.method === 'HEAD') return res.end();
+    const stream = fs.createReadStream(full, {start: start, end: Math.max(start, end)});
+    stream.on('error', function(){ try{ res.destroy(); }catch(e){} });
+    stream.pipe(res);
+  }
+  function queryToken(req){
+    try{ return new URL(req.url, 'http://127.0.0.1').searchParams.get('t') || ''; }catch(e){ return ''; }
+  }
+
+  // ---------- приём файлов потоком (без base64 и без лимита 80 МБ) ----------
+  function saveStream(req, target, max){
+    return new Promise(function(resolve, reject){
+      const out = fs.createWriteStream(target);
+      let total = 0, head = Buffer.alloc(0), done = false;
+      function fail(err){
+        if(done) return;
+        done = true;
+        try{ out.destroy(); }catch(e){}
+        try{ fs.unlinkSync(target); }catch(e){}
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+      req.on('data', function(c){
+        if(done) return;
+        total += c.length;
+        if(total > max){
+          try{ req.destroy(); }catch(e){}
+          return fail(new Error('файл больше ' + Math.round(max / 1048576) + ' МБ'));
+        }
+        if(head.length < 64) head = Buffer.concat([head, c.subarray(0, 64 - head.length)]);
+        if(!out.write(c)){
+          try{ req.pause(); }catch(e){}
+          out.once('drain', function(){ try{ req.resume(); }catch(e){} });
+        }
+      });
+      req.on('error', fail);
+      out.on('error', fail);
+      req.on('end', function(){
+        if(done) return;
+        out.end(function(){ if(done) return; done = true; resolve({path: target, bytes: total, head: head}); });
+      });
+    });
+  }
+
+  async function webToFile(resp, target, max){
+    const out = fs.createWriteStream(target);
+    const reader = resp.body && resp.body.getReader ? resp.body.getReader() : null;
+    let total = 0, head = Buffer.alloc(0);
+    if(!reader){
+      const buf = Buffer.from(await resp.arrayBuffer());
+      if(buf.length > max) throw new Error('файл больше ' + Math.round(max / 1048576) + ' МБ');
+      fs.writeFileSync(target, buf);
+      return {path: target, bytes: buf.length, head: buf.subarray(0, 64)};
+    }
+    try{
+      while(true){
+        const step = await reader.read();
+        if(step.done) break;
+        const chunk = Buffer.from(step.value);
+        total += chunk.length;
+        if(total > max){
+          try{ await reader.cancel(); }catch(e){}
+          throw new Error('файл больше ' + Math.round(max / 1048576) + ' МБ');
+        }
+        if(head.length < 64) head = Buffer.concat([head, chunk.subarray(0, 64 - head.length)]);
+        if(!out.write(chunk)) await new Promise(function(ok){ out.once('drain', ok); });
+      }
+    }catch(e){
+      try{ out.destroy(); }catch(_){}
+      try{ fs.unlinkSync(target); }catch(_){}
+      throw e;
+    }
+    await new Promise(function(ok, bad){ out.end(ok); out.on('error', bad); });
+    return {path: target, bytes: total, head: head};
+  }
+
+  function mediaName(ext){
+    return 'custom-background-' + crypto.randomBytes(4).toString('hex') + ext;
+  }
+  function adoptMedia(tmpPath, ext){
+    if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается');
+    const name = mediaName(ext);
+    const target = path.join(dir, name);
+    try{ fs.renameSync(tmpPath, target); }
+    catch(e){
+      fs.copyFileSync(tmpPath, target);
+      try{ fs.unlinkSync(tmpPath); }catch(_){}
+    }
+    try{ cleanMedia(name); }catch(e){}
+    return {name: name, bytes: fs.statSync(target).size};
+  }
+
+  // ---------- zip (Wallpaper Engine и обычные архивы) ----------
+  function readZip(buf){
+    let eocd = -1;
+    const min = Math.max(0, buf.length - 0xFFFF - 22);
+    for(let i = buf.length - 22; i >= min; i--){
+      if(i >= 0 && buf.readUInt32LE(i) === 0x06054b50){ eocd = i; break; }
+    }
+    if(eocd < 0) throw new Error('это не zip-архив');
+    const count = buf.readUInt16LE(eocd + 10);
+    const cdOff = buf.readUInt32LE(eocd + 16);
+    if(cdOff === 0xFFFFFFFF) throw new Error('zip64 не поддерживается');
+    const list = [];
+    let p = cdOff;
+    for(let i = 0; i < count; i++){
+      if(p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50) break;
+      const method = buf.readUInt16LE(p + 10);
+      const csize = buf.readUInt32LE(p + 20);
+      const usize = buf.readUInt32LE(p + 24);
+      const nlen = buf.readUInt16LE(p + 28);
+      const elen = buf.readUInt16LE(p + 30);
+      const clen = buf.readUInt16LE(p + 32);
+      const off = buf.readUInt32LE(p + 42);
+      const name = buf.toString('utf8', p + 46, p + 46 + nlen);
+      p += 46 + nlen + elen + clen;
+      if(!name) continue;
+      list.push({name: name, dir: /\/$/.test(name), method: method, csize: csize, usize: usize, off: off});
+    }
+    if(!list.length) throw new Error('архив пустой');
+    return list;
+  }
+  function zipEntry(buf, e){
+    const q = e.off;
+    if(q + 30 > buf.length || buf.readUInt32LE(q) !== 0x04034b50) throw new Error('повреждённый архив');
+    if(e.usize > 512 * 1024 * 1024) throw new Error('файл в архиве больше 512 МБ');
+    const nlen = buf.readUInt16LE(q + 26);
+    const elen = buf.readUInt16LE(q + 28);
+    const start = q + 30 + nlen + elen;
+    const comp = buf.subarray(start, start + e.csize);
+    if(e.method === 0) return Buffer.from(comp);
+    if(e.method === 8){
+      return zlib.inflateRawSync(comp, {maxOutputLength: Math.max(1024 * 1024, Math.min(e.usize + 1024, MAX))});
+    }
+    throw new Error('сжатие в архиве не поддерживается');
+  }
+  function findEntry(z, name){
+    const want = String(name || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+    if(!want) return null;
+    for(let i = 0; i < z.length; i++){
+      if(!z[i].dir && z[i].name.replace(/^\/+/, '').toLowerCase() === want) return z[i];
+    }
+    for(let i = 0; i < z.length; i++){
+      if(!z[i].dir && z[i].name.toLowerCase().slice(-want.length) === want) return z[i];
+    }
+    return null;
+  }
+  function pickLargest(z, exts){
+    let best = null;
+    for(let i = 0; i < z.length; i++){
+      if(z[i].dir || exts.indexOf(path.extname(z[i].name).toLowerCase()) === -1) continue;
+      if(!best || z[i].usize > best.usize) best = z[i];
+    }
+    return best;
+  }
+  function resetWebDir(){
+    try{ fs.rmSync(WEB_DIR, {recursive: true, force: true}); }catch(e){}
+    fs.mkdirSync(WEB_DIR, {recursive: true});
+  }
+  function installWebFromZip(buf, z, prefix, entryName){
+    const files = z.filter(function(e){ return !e.dir && e.name.indexOf(prefix) === 0; });
+    if(!files.length) throw new Error('архив пустой');
+    let total = 0;
+    for(let i = 0; i < files.length; i++){
+      total += files[i].usize;
+      if(total > 512 * 1024 * 1024) throw new Error('веб-обои больше 512 МБ');
+    }
+    resetWebDir();
+    for(let i = 0; i < files.length; i++){
+      const rel = files[i].name.slice(prefix.length).replace(/\\/g, '/');
+      if(/^project\.json$/i.test(rel)) continue;
+      const target = safeWebPath(rel);
+      if(!target) continue;
+      fs.mkdirSync(path.dirname(target), {recursive: true});
+      fs.writeFileSync(target, zipEntry(buf, files[i]));
+    }
+    let entry = String(entryName || 'index.html').replace(/\\/g, '/');
+    let full = safeWebPath(entry);
+    if(!full || !fs.existsSync(full)){
+      entry = 'index.html';
+      full = safeWebPath(entry);
+      if(!full || !fs.existsSync(full)){
+        const found = files.filter(function(f){ return /(^|\/)index\.html?$/i.test(f.name); })[0];
+        if(!found) throw new Error('в архиве нет index.html');
+        entry = found.name.slice(prefix.length).replace(/\\/g, '/');
+      }
+    }
+    return entry;
+  }
+  function installWebFile(srcPath){
+    resetWebDir();
+    fs.copyFileSync(srcPath, path.join(WEB_DIR, 'index.html'));
+    return 'index.html';
+  }
+  function handleWallpaperZip(zipPath){
+    const st = fs.statSync(zipPath);
+    if(st.size > MAX_ZIP) throw new Error('архив больше 1 ГБ');
+    const buf = fs.readFileSync(zipPath);
+    const z = readZip(buf);
+    let pj = null;
+    for(let i = 0; i < z.length; i++){
+      if(!z[i].dir && /(^|\/)project\.json$/i.test(z[i].name)){ pj = z[i]; break; }
+    }
+    let project = {};
+    if(pj){
+      try{ project = JSON.parse(zipEntry(buf, pj).toString('utf8')) || {}; }catch(e){ project = {}; }
+    }
+    const prefix = pj ? pj.name.slice(0, pj.name.lastIndexOf('/') + 1) : '';
+    const type = String(project.type || '').toLowerCase();
+    const entryName = String(project.file || '');
+
+    if(type === 'web'){
+      const entry = installWebFromZip(buf, z, prefix, entryName);
+      return {kind: 'web', web: entry, note: 'Веб-обои (HTML) из архива'};
+    }
+
+    if(type === 'video' || type === ''){
+      let picked = entryName ? findEntry(z, prefix + entryName) : null;
+      if(!picked) picked = pickLargest(z, ['.mp4', '.webm', '.mov', '.m4v', '.ogv']);
+      if(picked){
+        const data = zipEntry(buf, picked);
+        let ext = path.extname(picked.name).toLowerCase();
+        if(ext === '.jpeg') ext = '.jpg';
+        const sniff = sniffExt(data);
+        if(sniff && ALLOWED_EXT.indexOf(sniff) !== -1 && sniff !== ext &&
+           !(sniff === '.mp4' && ext === '.m4v')) ext = sniff;
+        const w = writeMedia(data, ext);
+        return {kind: 'media', file: w.name, bytes: w.bytes};
+      }
+    }
+
+    // scene/application (или видео не нашлось): без Wallpaper Engine сцену не проиграть,
+    // поэтому берём анимированное превью из архива, если оно есть.
+    let pv = findEntry(z, prefix + 'preview.gif') || findEntry(z, 'preview.gif');
+    if(!pv){
+      pv = findEntry(z, prefix + 'preview.jpg') || findEntry(z, 'preview.jpg') ||
+           findEntry(z, prefix + 'preview.png') || findEntry(z, 'preview.png');
+    }
+    if(pv){
+      const data = zipEntry(buf, pv);
+      const ext = path.extname(pv.name).toLowerCase() === '.png' ? '.png' : (path.extname(pv.name).toLowerCase() === '.gif' ? '.gif' : '.jpg');
+      const w = writeMedia(data, ext);
+      return {kind: 'media', file: w.name, bytes: w.bytes,
+        note: 'Wallpaper Engine: сцену без движка не проиграть — поставил ' +
+              (ext === '.gif' ? 'анимированное превью (GIF)' : 'превью картинкой')};
+    }
+    throw new Error('в архиве нет ни видео, ни HTML-обоев, ни превью');
+  }
+
+  // ---------- ссылка / HTML-код обоев ----------
+  function decodeHtml(s){
+    return String(s || '')
+      .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0*39;/g, "'")
+      .replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&#x2F;/gi, '/').replace(/&#0*47;/g, '/');
+  }
+  function attrsOf(tag){
+    const out = {};
+    const re = /([\w:.-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
+    let m;
+    while((m = re.exec(tag))){
+      out[m[1].toLowerCase()] = decodeHtml(m[3] !== undefined ? m[3] : (m[4] !== undefined ? m[4] : m[5]));
+    }
+    return out;
+  }
+  function absUrl(u, base){
+    try{ return new URL(String(u || '').trim(), base || undefined).toString(); }catch(e){ return ''; }
+  }
+  function isVideoUrl(u){
+    return /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i.test(String(u || ''));
+  }
+  function isMediaUrl(u){
+    return /\.(mp4|webm|mov|m4v|ogv|gif|jpe?g|png|webp|avif|bmp)(\?|#|$)/i.test(String(u || ''));
+  }
+  function htmlSources(html, base){
+    const out = {video: '', image: '', embed: '', zip: ''};
+    const src = String(html || '');
+    const tags = src.match(/<(meta|video|source|iframe|a)\b[^>]*>/gi) || [];
+    for(let i = 0; i < tags.length; i++){
+      const tag = tags[i];
+      const a = attrsOf(tag);
+      const key = String(a.property || a.name || a.itemprop || '').toLowerCase();
+      const content = a.content || '';
+      const href = a.src || a.href || a['data-src'] || a['data-video-src'] || a['data-url'] || '';
+      const abs = href ? absUrl(href, base) : '';
+      if(!out.video && content && /^(og:video(:url|:secure_url)?|twitter:player:stream|contenturl)$/.test(key) && isMediaUrl(content)){
+        out.video = absUrl(content, base);
+      }
+      if(!out.image && content && /^(og:image(:url|:secure_url)?|twitter:image|image)$/.test(key)){
+        out.image = absUrl(content, base);
+      }
+      if(/^<video\b/i.test(tag) && abs && isVideoUrl(abs)) out.video = out.video || abs;
+      if(/^<source\b/i.test(tag) && abs && isVideoUrl(abs)) out.video = out.video || abs;
+      if(/^<iframe\b/i.test(tag) && abs && /^https?:/i.test(abs)) out.embed = out.embed || abs;
+      if(/^<a\b/i.test(tag) && abs && /\.zip(\?|#|$)/i.test(abs) && !out.zip) out.zip = abs;
+    }
+    if(!out.video){
+      const m = src.match(/https?:\/\/[^\s"'<>\\]+\.(?:mp4|webm|mov|m4v|ogv)(?:\?[^\s"'<>\\]*)?/i);
+      if(m) out.video = decodeHtml(m[0]);
+    }
+    if(!out.image){
+      const m = src.match(/https?:\/\/[^\s"'<>\\]+\.(?:gif|jpe?g|png|webp)(?:\?[^\s"'<>\\]*)?/i);
+      if(m) out.image = decodeHtml(m[0]);
+    }
+    return out;
+  }
+
+  let tmpSeq = 0;
+  function tempPath(ext){
+    tmpSeq++;
+    return path.join(dir, '.ymbg-tmp-' + process.pid + '-' + Date.now() + '-' + tmpSeq + (ext || ''));
+  }
+
+  async function fetchToTemp(url, max, ext){
+    const tmp = tempPath(ext);
+    const ctl = new AbortController();
+    const timer = setTimeout(function(){ ctl.abort(); }, 20 * 60 * 1000);
+    try{
+      const got = await fetchMedia(url, ctl.signal);
+      const r = got.resp;
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      const ct = String(r.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
+      const len = Number(r.headers.get('content-length') || 0);
+      if(len && len > max) throw new Error('файл больше ' + Math.round(max / 1048576) + ' МБ');
+      const saved = await webToFile(r, tmp, max);
+      return {path: saved.path, bytes: saved.bytes, head: saved.head, contentType: ct, finalUrl: got.url};
+    } finally { clearTimeout(timer); }
+  }
+
+  async function installMediaFromUrl(url){
+    const got = await fetchToTemp(url, MAX);
+    const ct = got.contentType;
+    if(ct.indexOf('text/') === 0 || ct === 'application/json' || ct === 'application/xhtml+xml' || ct === 'application/xml'){
+      try{ fs.unlinkSync(got.path); }catch(e){}
+      throw new Error('ссылка ведёт на страницу, а не на файл');
+    }
+    const sniff = sniffExt(got.head);
+    let ext = sniff || extFromType(ct);
+    if(!ext){
+      try{ ext = path.extname(new URL(got.finalUrl).pathname).toLowerCase(); }catch(e){ ext = ''; }
+    }
+    if(ext === '.jpeg') ext = '.jpg';
+    if(!ext || ALLOWED_EXT.indexOf(ext) === -1){
+      try{ fs.unlinkSync(got.path); }catch(e){}
+      throw new Error('ссылка ведёт не на картинку или видео');
+    }
+    if(sniff && sniff !== ext && !(sniff === '.mp4' && ext === '.m4v')) ext = sniff;
+    const w = adoptMedia(got.path, ext);
+    return {kind: 'media', file: w.name, bytes: w.bytes};
+  }
+
+  async function resolveSource(raw){
+    const src = String(raw || '').trim();
+    if(!src) throw new Error('пустая ссылка');
+
+    // HTML-код (embed/video/iframe) — вытаскиваем источник
+    if(src.indexOf('<') !== -1){
+      const found = htmlSources(src, '');
+      if(found.video) return await installMediaFromUrl(found.video);
+      if(found.zip) return await handleWallpaperZipFromUrl(found.zip);
+      if(found.embed) return {kind: 'web', web: found.embed, note: 'HTML-обои (iframe)'};
+      if(found.image) return await installMediaFromUrl(found.image);
+      throw new Error('в HTML-коде не нашёл ни видео, ни iframe');
+    }
+
+    // Локальный путь
+    if(/^[a-zA-Z]:[\\/]/.test(src) || src.indexOf('\\\\') === 0){
+      let st;
+      try{ st = fs.statSync(src); }catch(e){ throw new Error('файл не найден: ' + src); }
+      if(!st.isFile()) throw new Error('это не файл');
+      const ext = path.extname(src).toLowerCase();
+      if(ext === '.zip') return await handleWallpaperZip(src);
+      if(ext === '.html' || ext === '.htm') return {kind: 'web', web: installWebFile(src), note: 'HTML-обои'};
+      if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается: ' + ext);
+      if(st.size > MAX) throw new Error('файл больше 2 ГБ');
+      const tmp = tempPath(ext);
+      fs.copyFileSync(src, tmp);
+      const w = adoptMedia(tmp, ext);
+      return {kind: 'media', file: w.name, bytes: w.bytes};
+    }
+
+    const u = await assertPublicUrl(src);
+
+    if(isMediaUrl(u.toString())){
+      return await installMediaFromUrl(u.toString());
+    }
+
+    const got = await fetchToTemp(u.toString(), MAX_ZIP, '.tmp');
+    const ct = got.contentType;
+    try{
+      if(ct === 'application/zip' || ct === 'application/x-zip-compressed' ||
+         (got.head && got.head.toString('ascii', 0, 2) === 'PK')){
+        const zr = await handleWallpaperZip(got.path);
+        return zr;
+      }
+      if(ct.indexOf('text/html') === 0 || ct === 'application/xhtml+xml'){
+        let html = '';
+        try{ html = fs.readFileSync(got.path, 'utf8').slice(0, 4 * 1024 * 1024); }catch(e){ html = ''; }
+        const found = htmlSources(html, got.finalUrl);
+        if(found.video) return await installMediaFromUrl(found.video);
+        if(found.zip) return await handleWallpaperZipFromUrl(found.zip);
+        if(found.image) return await installMediaFromUrl(found.image);
+        if(found.embed) return {kind: 'web', web: found.embed, note: 'HTML-обои (iframe со страницы)'};
+        throw new Error('на странице не нашлось видео или обоев — нужна прямая ссылка или .zip');
+      }
+      const sniff = sniffExt(got.head);
+      let ext = sniff || extFromType(ct);
+      if(ext === '.jpeg') ext = '.jpg';
+      if(ext && ALLOWED_EXT.indexOf(ext) !== -1){
+        if(sniff && sniff !== ext) ext = sniff;
+        const w = adoptMedia(got.path, ext);
+        return {kind: 'media', file: w.name, bytes: w.bytes};
+      }
+      throw new Error('ссылка ведёт не на картинку, видео или архив');
+    } finally {
+      try{ if(fs.existsSync(got.path)) fs.unlinkSync(got.path); }catch(e){}
+    }
+  }
+
+  async function handleWallpaperZipFromUrl(url){
+    const got = await fetchToTemp(url, MAX_ZIP, '.zip');
+    try{ return await handleWallpaperZip(got.path); }
+    finally{ try{ fs.unlinkSync(got.path); }catch(e){} }
   }
 
   function isPrivateIPv4(ip){
@@ -1225,29 +1814,6 @@ function __ymBgStartServer(){
     return '';
   }
 
-  async function readLimited(resp, max){
-    const reader = resp.body && resp.body.getReader ? resp.body.getReader() : null;
-    if(!reader){
-      const buf = Buffer.from(await resp.arrayBuffer());
-      if(buf.length > max) throw new Error('файл больше 80 МБ');
-      return buf;
-    }
-    const chunks = [];
-    let total = 0;
-    while(true){
-      const step = await reader.read();
-      if(step.done) break;
-      const chunk = Buffer.from(step.value);
-      total += chunk.length;
-      if(total > max){
-        try{ await reader.cancel(); }catch(e){}
-        throw new Error('файл больше 80 МБ');
-      }
-      chunks.push(chunk);
-    }
-    return Buffer.concat(chunks, total);
-  }
-
   async function fetchMedia(url, signal){
     let current = String(url);
     for(let hop = 0; hop <= 5; hop++){
@@ -1267,40 +1833,6 @@ function __ymBgStartServer(){
       return {resp: r, url: current};
     }
     throw new Error('слишком много перенаправлений');
-  }
-
-  async function download(url){
-    const ctl = new AbortController();
-    const timer = setTimeout(function(){ ctl.abort(); }, 120000);
-    try{
-      const got = await fetchMedia(url, ctl.signal);
-      const r = got.resp;
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      const ct = String(r.headers.get('content-type') || '').toLowerCase();
-      const base = ct.split(';')[0].trim();
-      if(base.indexOf('text/') === 0 || base.indexOf('application/json') === 0 ||
-         base.indexOf('application/xhtml') === 0 || base.indexOf('application/xml') === 0){
-        throw new Error('ссылка ведёт на страницу, а не на файл — нужна прямая ссылка на видео/картинку');
-      }
-      const len = Number(r.headers.get('content-length') || 0);
-      if(len > MAX) throw new Error('файл больше 80 МБ');
-      const buf = await readLimited(r, MAX);
-      if(!buf.length) throw new Error('пустой ответ');
-      const sniff = sniffExt(buf);
-      if(!sniff) throw new Error('ссылка ведёт не на картинку или видео');
-      let ext = extFromType(base);
-      if(!ext){
-        try{ ext = path.extname(new URL(got.url).pathname).toLowerCase(); }catch(e){ ext = ''; }
-      }
-      if(ext === '.jpeg') ext = '.jpg';
-      const compatible = (ext === sniff) || (sniff === '.mp4' && ext === '.m4v') ||
-        (sniff === '.avif' && ext === '.avif') || (sniff === '.ogv' && ext === '.ogv');
-      if(!compatible) ext = sniff;
-      if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается');
-      return {buf: buf, ext: ext};
-    } finally {
-      clearTimeout(timer);
-    }
   }
 
   function allowedFileRoots(){
@@ -1329,22 +1861,15 @@ function __ymBgStartServer(){
     const st = fs.statSync(real);
     if(!st.isFile()) throw new Error('это не файл');
     if(!st.size) throw new Error('файл пустой');
-    if(st.size > MAX) throw new Error('файл больше 80 МБ');
+    if(st.size > MAX) throw new Error('файл больше 2 ГБ');
     return {real: real, st: st};
   }
   function writeMedia(buf, ext){
     if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается');
-    const name = 'custom-background' + ext;
+    const name = mediaName(ext);
     const target = path.join(dir, name);
-    const tmp = path.join(dir, '.' + name + '.tmp');
-    fs.writeFileSync(tmp, buf);
-    try{
-      fs.renameSync(tmp, target);
-    }catch(e){
-      try{ fs.unlinkSync(target); }catch(_){}
-      fs.renameSync(tmp, target);
-    }
-    cleanMedia(name);
+    fs.writeFileSync(target, buf);
+    try{ cleanMedia(name); }catch(e){}
     return {name: name, bytes: buf.length};
   }
 
@@ -1355,10 +1880,11 @@ function __ymBgStartServer(){
     let fileName = existing;
     let saved = 0;
     let mediaChanged = false;
+    let webNote = '';
 
     if(d.dataUri !== undefined && d.dataUri !== ''){
       const raw = String(d.dataUri);
-      if(raw.length > 120 * 1024 * 1024) throw new Error('файл больше 80 МБ');
+      if(raw.length > 90 * 1024 * 1024) throw new Error('файл больше 64 МБ');
       const m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(raw);
       if(!m) throw new Error('не удалось прочитать файл');
       const mime = (m[1] || '').toLowerCase();
@@ -1371,31 +1897,43 @@ function __ymBgStartServer(){
         buf = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
       }catch(e){ throw new Error('не удалось прочитать файл'); }
       if(!buf.length) throw new Error('пустой файл');
-      if(buf.length > MAX) throw new Error('файл больше 80 МБ');
+      if(buf.length > 64 * 1024 * 1024) throw new Error('файл больше 64 МБ');
       const sniff = sniffExt(buf);
       if(!sniff) throw new Error('формат не поддерживается');
       const w = writeMedia(buf, sniff);
       fileName = w.name; saved = w.bytes; mediaChanged = true;
     } else if(d.url !== undefined && d.url !== ''){
-      const got = await download(String(d.url));
-      const w = writeMedia(got.buf, got.ext);
-      fileName = w.name; saved = w.bytes; mediaChanged = true;
+      const out = await resolveSource(String(d.url));
+      if(out.kind === 'web'){
+        cfg.web = String(out.web || '');
+        cfg.file = '';
+        cfg.adaptive = false;
+        cfg.webStamp = Date.now();
+        mediaChanged = true;
+        webNote = out.note || '';
+        saved = 0;
+        try{ cleanMedia(''); }catch(e){}
+      } else {
+        cfg.web = '';
+        fileName = out.file || '';
+        saved = out.bytes || 0;
+        mediaChanged = true;
+        webNote = out.note || '';
+      }
     } else if(d.file !== undefined && d.file !== ''){
       const picked = resolveAllowedFile(d.file);
       let ext = path.extname(picked.real).toLowerCase();
       if(ext === '.jpeg') ext = '.jpg';
       if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается');
-      const buf = fs.readFileSync(picked.real);
-      const sniff = sniffExt(buf);
-      if(!sniff) throw new Error('формат не поддерживается');
-      if(ext !== sniff && !(sniff === '.mp4' && ext === '.m4v') && !(sniff === '.avif' && ext === '.avif')){
-        ext = sniff;
-      }
-      const w = writeMedia(buf, ext);
+      if(picked.st.size > MAX) throw new Error('файл больше 2 ГБ');
+      const tmp = tempPath(ext);
+      fs.copyFileSync(picked.real, tmp);
+      const w = adoptMedia(tmp, ext);
       fileName = w.name; saved = w.bytes; mediaChanged = true;
     }
 
-    if(fileName) cfg.file = fileName;
+    if(cfg.web && mediaChanged) cfg.file = '';
+    else if(fileName) cfg.file = fileName;
     Object.keys(NUMERIC).forEach(function(k){
       if(d[k] === undefined || d[k] === null || d[k] === '') return;
       const n = Number(d[k]);
@@ -1407,11 +1945,13 @@ function __ymBgStartServer(){
 
     const payload = mediaChanged ? __ymBgReadPayload() : __ymBgSettingsPayload(cfg);
     __ymBgBroadcast(payload);
-    const info = __ymBgMediaInfo(fileName);
-    return {ok: true, file: fileName, bytes: saved, isVideo: info.isVideo};
+    const info = __ymBgMediaInfo(fileName || cfg.file);
+    return {ok: true, kind: cfg.web ? 'web' : 'media', web: cfg.web || '',
+            file: cfg.web ? '' : (fileName || cfg.file), bytes: saved,
+            isVideo: !!info.isVideo, note: webNote || ''};
   }
 
-  const srv = http.createServer(function(req, res){
+  const srv = http.createServer(async function(req, res){
     res.__ymOrigin = req.headers.origin || '';
     if(!hostAllowed(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
     if(!originAllowed(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
@@ -1422,7 +1962,7 @@ function __ymBgStartServer(){
       res.writeHead(204, {
         'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-        'Access-Control-Allow-Headers': 'content-type,x-ymbg-token',
+        'Access-Control-Allow-Headers': 'content-type,x-ymbg-token,x-ymbg-name',
         'Access-Control-Max-Age': '600',
         'Vary': 'Origin',
         'Content-Length': '0'
@@ -1443,6 +1983,84 @@ function __ymBgStartServer(){
         return reply(res, 500, {ok: false, error: String((e && e.message) || e)});
       }
     }
+    if(req.method === 'GET' && u === '/media'){
+      if(!tokenEquals(queryToken(req), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const cfg = readCfg();
+      const full = __ymBgSafeMediaPath(dir, cfg.file);
+      if(!full) return reply(res, 404, {ok: false, error: 'no media'});
+      return serveFile(req, res, full, full);
+    }
+
+    if((req.method === 'GET' || req.method === 'HEAD') && u.indexOf('/web/') === 0){
+      const m = /^\/web\/([^/]+)\/(.*)$/.exec(u);
+      if(!m || !tokenEquals(decodeURIComponent(m[1]), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      let rel = '';
+      try{ rel = decodeURIComponent(m[2] || ''); }catch(e){ rel = ''; }
+      if(!rel) rel = 'index.html';
+      let full = safeWebPath(rel);
+      try{
+        if(full && fs.statSync(full).isDirectory()){
+          rel = rel.replace(/\/+$/, '') + '/index.html';
+          full = safeWebPath(rel);
+        }
+      }catch(e){}
+      if(!full) return reply(res, 404, {ok: false, error: 'not found'});
+      return serveFile(req, res, full, rel);
+    }
+
+    if(req.method === 'POST' && (u === '/upload' || u === '/wallpaper')){
+      if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const isWallpaper = u === '/wallpaper';
+      const tmp = tempPath(isWallpaper ? '.wp' : '.up');
+      let saved;
+      try{ saved = await saveStream(req, tmp, isWallpaper ? MAX_ZIP : MAX); }
+      catch(e){
+        return reply(res, 413, {ok: false, error: String((e && e.message) || e)});
+      }
+      try{
+        let out;
+        if(isWallpaper){
+          let name = String(req.headers['x-ymbg-name'] || '');
+          try{ name = decodeURIComponent(name); }catch(e){}
+          const ext = path.extname(name).toLowerCase();
+          if(ext === '.html' || ext === '.htm'){
+            const entry = installWebFile(tmp);
+            out = {kind: 'web', web: entry, bytes: saved.bytes, note: 'HTML-обои'};
+          } else if(ext === '.zip'){
+            out = handleWallpaperZip(tmp);
+          } else {
+            const sniff = sniffExt(saved.head) || (ALLOWED_EXT.indexOf(ext) !== -1 ? ext : '');
+            if(!sniff) throw new Error('формат не поддерживается');
+            const w = adoptMedia(tmp, sniff);
+            out = {kind: 'media', file: w.name, bytes: w.bytes};
+          }
+        } else {
+          const sniff = sniffExt(saved.head);
+          if(!sniff || ALLOWED_EXT.indexOf(sniff) === -1) throw new Error('формат не поддерживается');
+          const w = adoptMedia(tmp, sniff);
+          out = {kind: 'media', file: w.name, bytes: w.bytes};
+          const info = __ymBgMediaInfo(w.name);
+          out.isVideo = !!info.isVideo;
+        }
+        const cfg = readCfg();
+        cfg.adaptive = false;
+        if(out.kind === 'web'){
+          cfg.web = String(out.web || '');
+          cfg.file = '';
+          cfg.webStamp = Date.now();
+          try{ cleanMedia(''); }catch(e){}
+        }
+        else { cfg.web = ''; cfg.file = out.file; }
+        writeCfg(cfg);
+        __ymBgBroadcast(__ymBgReadPayload());
+        try{ if(fs.existsSync(tmp)) fs.unlinkSync(tmp); }catch(e){}
+        return reply(res, 200, Object.assign({ok: true}, out));
+      }catch(e){
+        try{ if(fs.existsSync(tmp)) fs.unlinkSync(tmp); }catch(_){}
+        return reply(res, 400, {ok: false, error: String((e && e.message) || e)});
+      }
+    }
+
     if(req.method === 'POST' && u === '/apply'){
       if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
       const ct = String(req.headers['content-type'] || '').toLowerCase();
@@ -1453,7 +2071,7 @@ function __ymBgStartServer(){
       req.on('data', function(c){
         if(closed) return;
         total += c.length;
-        if(total > 120 * 1024 * 1024){
+        if(total > MAX_JSON){
           closed = true;
           try{ reply(res, 413, {ok: false, error: 'слишком большой запрос'}); }catch(e){}
           req.destroy();
@@ -1483,6 +2101,7 @@ function __ymBgStartServer(){
   srv.on('error', function(e){
     try{ console.error('[ymbg] server error:', (e && e.message) || e); }catch(_){}
   });
+  try{ cleanMedia(path.basename(String(readCfg().file || ''))); }catch(e){}
   try{ srv.listen(PORT, '127.0.0.1'); }
   catch(e){ try{ console.error('[ymbg] listen failed:', (e && e.message) || e); }catch(_){} }
 }
