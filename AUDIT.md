@@ -99,7 +99,7 @@
   Скачивание по-прежнему только на публичные http(s)-адреса, порты 80/443,
   с проверкой каждого редиректа.
 - **Wallpaper Engine `.zip`.** Свой мини-распаковщик (stored/deflate):
-  `type: video` → видеофайл, `type: web` → папка в `web-wallpaper` и iframe
+  `type: video` → видеофайл, `type: web` → папка в кэше `web` и iframe
   через `/web/<токен>/…`, `scene`/`application` → `preview.gif`/`preview.jpg`
   с честной пометкой, что сцену без WE не проиграть.
 - **CORS-заголовок `x-ymbg-name`.** Без него preflight отклонял загрузку файлов

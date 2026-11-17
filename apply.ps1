@@ -92,6 +92,8 @@ if (-not (Test-Path -LiteralPath $asar)) { throw "Yandex Music resources not fou
 
 $exe = Get-MusicExe
 $userDir = Join-Path $env:APPDATA "YandexMusic"
+$wallDir = Join-Path $userDir "wallpapers"
+$cacheDir = Join-Path $env:LOCALAPPDATA "YandexMusic-bg"
 $py = Find-Python $Python
 
 Write-Host "Stopping Yandex Music..."
@@ -107,9 +109,38 @@ Write-Host "Patching app.asar..."
 if ($LASTEXITCODE -ne 0) { throw "asar patch failed" }
 
 New-Item -ItemType Directory -Force -Path $userDir | Out-Null
+New-Item -ItemType Directory -Force -Path $wallDir | Out-Null
+New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+
+# --- Старая раскладка: фоны из корня профиля переезжают в wallpapers,
+#     служебные файлы — в кэш. Так папка с обоями остаётся чистой. ---
+$mediaExt = @(".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp",
+              ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".zip", ".html", ".htm")
+$movedCount = 0
+Get-ChildItem $userDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $ext = $_.Extension.ToLower()
+    $isMedia = $mediaExt -contains $ext
+    $isMod = ($_.Name -like "custom-background.*") -or ($_.Name -like "custom-background-*") -or ($_.Name -like ".custom-background*")
+    if (-not $isMedia -and -not $isMod) { return }
+    $dstDir = if ($isMedia) { $wallDir } else { $cacheDir }
+    $dst = Join-Path $dstDir $_.Name
+    if (Test-Path -LiteralPath $dst) {
+        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+    } else {
+        Move-Item -LiteralPath $_.FullName -Destination $dst -Force -ErrorAction SilentlyContinue
+    }
+    $script:movedCount++
+}
+if ($movedCount -gt 0) { Write-Host "Moved $movedCount file(s): wallpapers -> wallpapers, service -> cache" }
+foreach ($legacyDir in @("web-wallpaper", "thumbs")) {
+    $p = Join-Path $userDir $legacyDir
+    if (Test-Path -LiteralPath $p) {
+        Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 # --- CSS: старую версию (v1) убираем в .bak, чтобы не мешала ---
-$cssDst = Join-Path $userDir "custom-background.css"
+$cssDst = Join-Path $cacheDir "custom-background.css"
 if (Test-Path $cssDst) {
     $cssText = Get-Content $cssDst -Raw -Encoding UTF8
     if ($cssText -notmatch "v2") {
@@ -123,7 +154,7 @@ if (-not (Test-Path $cssDst)) {
 }
 
 # --- JSON-конфиг ---
-$jsonDst = Join-Path $userDir "custom-background.json"
+$jsonDst = Join-Path $cacheDir "custom-background.json"
 if (-not (Test-Path $jsonDst)) {
     Copy-Item (Join-Path $root "custom-background.json") $jsonDst
     Write-Host "Installed custom-background.json"
@@ -143,8 +174,9 @@ if (Test-Path -LiteralPath $legacyToken) {
 }
 
 # --- Картинка ---
-$images = @(Get-ChildItem $userDir -Filter "custom-background*" -ErrorAction SilentlyContinue |
-    Where-Object { $_.Extension -notin ".css", ".json", ".bak" })
+$images = @(Get-ChildItem $wallDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $mediaExt -contains $_.Extension.ToLower() -and $_.Name -notlike "*.zip" -and
+                   $_.Name -notlike "*.html" -and $_.Name -notlike "*.htm" })
 
 if ($Image) {
     if (-not (Test-Path -LiteralPath $Image)) { throw "Image not found: $Image" }
@@ -157,7 +189,7 @@ if ($Image) {
     if ($size -gt 2GB) { throw "Image is larger than 2 GB" }
     $images | Remove-Item -Force -ErrorAction SilentlyContinue
     $fileName = "custom-background" + $ext
-    Copy-Item $resolved (Join-Path $userDir $fileName) -Force
+    Copy-Item $resolved (Join-Path $wallDir $fileName) -Force
     $cfg = Get-Content $jsonDst -Raw -Encoding UTF8 | ConvertFrom-Json
     $cfg.file = $fileName
     $cfg.web = ""
@@ -171,7 +203,7 @@ if ($Image) {
 elseif ($images.Count -eq 0) {
     $def = Join-Path $root "background.jpg"
     if (Test-Path $def) {
-        Copy-Item $def (Join-Path $userDir "custom-background.jpg") -Force
+        Copy-Item $def (Join-Path $wallDir "custom-background.jpg") -Force
         $cfg = Get-Content $jsonDst -Raw -Encoding UTF8 | ConvertFrom-Json
         $cfg.file = "custom-background.jpg"
         $cfg.adaptive = $false

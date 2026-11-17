@@ -38,11 +38,15 @@ ENGINE = r"""
     web: C.web || '',
     webBase: C.webBase || '',
     webStamp: Number(C.webStamp) || 0,
-    fit: (['smart','cover','contain','stretch'].indexOf(String(C.fit || '')) !== -1) ? String(C.fit) : 'smart',
+    fit: String(C.fit || '') === 'cover' ? 'cover' : 'smart',
     token: C.token || ''
   };
 
   function buildStyle(){
+    // blur(0px) всё равно заставляет Chromium прогонять фильтр через отдельный
+    // проход — поэтому нулевое размытие в правило не попадает.
+    var mediaFilter = 'filter:brightness(var(--ym-bright))' +
+      (cfg.blur > 0 ? ' blur(var(--ym-blur))' : '') + ';';
     return [
     'html,body{background:transparent !important;}',
     '#ym-bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:#0d0d0d;',
@@ -50,13 +54,21 @@ ENGINE = r"""
       '--ym-vig:' + cfg.vignette + ';--ym-nav:' + cfg.navbarDim + ';}',
     '#ym-bg .ym-layer{position:absolute;inset:0;opacity:0;transition:opacity ' + cfg.fade + 'ms ease;}',
     '#ym-bg .ym-layer.active{opacity:1;}',
-    '#ym-bg .ym-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block;',
-      'filter:brightness(var(--ym-bright)) blur(var(--ym-blur));transform:scale(1.02) translateZ(0);}',
-    '#ym-bg .ym-media.ym-fit-contain{object-fit:contain;}',
-    '#ym-bg .ym-media.ym-fit-stretch{object-fit:fill;}',
-    '#ym-bg .ym-media.ym-front{object-fit:contain;transform:translateZ(0);}',
-    '#ym-bg .ym-media.ym-back{object-fit:cover;transform:scale(1.2) translateZ(0);',
-      'filter:brightness(.62) saturate(1.08) blur(34px);}',
+    // «Заполнить»: кадр ровно по окну (cover). Никаких scale(1.02) — лишнее
+    // растяжение слоя и потеря резкости ни к чему.
+    '#ym-bg .ym-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;',
+      'object-position:center;display:block;' + mediaFilter + 'transform:translateZ(0);}',
+    // «Умно»: передний слой показывает весь кадр (contain), задний — его же
+    // размытая копия под cover, чтобы поля по краям не были чёрными.
+    '#ym-bg .ym-media.ym-front{object-fit:contain;}',
+    // Кадр, который почти совпадает по пропорциям с окном, растягиваем на всё
+    // окно: обрезка минимальна, зато нет полей и размытых краёв.
+    '#ym-bg .ym-media.ym-front.ym-fill{object-fit:cover;}',
+    '#ym-bg .ym-media.ym-back{object-fit:cover;transform:scale(1.14) translateZ(0);',
+      'filter:brightness(.7) saturate(1.1) blur(56px);}',
+    // В режиме заполнения задний размытый слой не нужен — он скрыт, чтобы не
+    // тратить кадры на лишний blur.
+    '#ym-bg .ym-layer.ym-fill .ym-back{display:none;}',
     '#ym-bg iframe.ym-media{border:0;background:transparent;}',
     '#ym-bg .ym-shade{position:absolute;inset:0;background:rgba(0,0,0,var(--ym-dim));}',
     '#ym-bg .ym-vignette{position:absolute;inset:0;opacity:var(--ym-vig);',
@@ -284,22 +296,80 @@ ENGINE = r"""
     return el;
   }
 
+  // Масштаб.
+  // «Заполнить» — кадр целиком закрывает окно: пропорции сохраняются,
+  // лишнее по краям обрезается. Один элемент, без трансформаций — максимум резкости.
+  // «Умно» — решение принимается по конкретному кадру и текущему окну:
+  // если обрезка при заполнении выходит небольшой, кадр заполняет окно целиком;
+  // если кадр сильно не совпадает по пропорциям, он виден полностью, а поля
+  // закрывает размытая копия того же кадра.
+  // Допустимая обрезка при заполнении: во сколько раз ширина/высота кадра
+  // отличается от окна. 1.22 — обрезается не больше ~18% одной стороны.
+  var SMART_CROP_LIMIT = 1.22;
+
+  function bindMediaMetrics(el, cb){
+    if(!el) return;
+    if(el.tagName === 'VIDEO'){
+      if(el.readyState >= 1) cb();
+      else el.addEventListener('loadedmetadata', cb, {once: true});
+    } else {
+      if(el.complete && el.naturalWidth) cb();
+      else el.addEventListener('load', cb, {once: true});
+    }
+  }
+
+  function mediaRatio(el){
+    if(!el) return 0;
+    var w = el.tagName === 'VIDEO' ? (el.videoWidth || 0) : (el.naturalWidth || 0);
+    var h = el.tagName === 'VIDEO' ? (el.videoHeight || 0) : (el.naturalHeight || 0);
+    if(!w || !h) return 0;
+    return w / h;
+  }
+
+  function decideFit(layer, front, mode){
+    if(!layer || !front) return;
+    var fill = true;
+    if(mode !== 'cover'){
+      var mr = mediaRatio(front);
+      var vr = (layer.clientWidth || 0) / (layer.clientHeight || 0);
+      if(mr > 0 && vr > 0){
+        var crop = mr > vr ? mr / vr : vr / mr;
+        fill = crop <= SMART_CROP_LIMIT;
+      }
+    }
+    if(front.classList.contains('ym-fill') !== fill) front.classList.toggle('ym-fill', fill);
+    if(layer.classList.contains('ym-fill') !== fill) layer.classList.toggle('ym-fill', fill);
+  }
+
   function setMedia(layer, url, isVideo, fit){
     if(!layer) return;
     layer.textContent = '';
-    var mode = fit || 'smart';
+    layer.classList.remove('ym-fill');
     try{
-      if(mode === 'smart'){
-        // Вся картинка целиком (contain), а полосы по краям заполняет
-        // размытая копия того же кадра — без чёрных полей.
-        layer.appendChild(makeMedia(url, isVideo, 'ym-back'));
-        layer.appendChild(makeMedia(url, isVideo, 'ym-front'));
-        return;
-      }
-      var cls = mode === 'contain' ? 'ym-fit-contain' : (mode === 'stretch' ? 'ym-fit-stretch' : '');
-      layer.appendChild(makeMedia(url, isVideo, cls));
+      var back = makeMedia(url, isVideo, 'ym-back');
+      var front = makeMedia(url, isVideo, 'ym-front');
+      layer.appendChild(back);
+      layer.appendChild(front);
+      layer.__ymFit = function(){ decideFit(layer, front, fit); };
+      bindMediaMetrics(front, layer.__ymFit);
+      layer.__ymFit();
     }catch(e){}
   }
+
+  // Окно поменяло размер — пропорции другие, решение по масштабу пересчитываем.
+  var resizeTimer = 0;
+  function refitAll(){
+    var r = document.getElementById('ym-bg');
+    if(!r) return;
+    var layers = r.querySelectorAll('.ym-layer');
+    for(var i = 0; i < layers.length; i++){
+      if(typeof layers[i].__ymFit === 'function') layers[i].__ymFit();
+    }
+  }
+  window.addEventListener('resize', function(){
+    if(resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(refitAll, 120);
+  });
 
   function setWeb(layer, url){
     if(!layer) return;
@@ -410,8 +480,8 @@ ENGINE = r"""
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
     var fitChanged = false;
     if(d.fit !== undefined){
-      var f = String(d.fit || '');
-      if(['smart','cover','contain','stretch'].indexOf(f) !== -1 && f !== cfg.fit){
+      var f = String(d.fit || '') === 'cover' ? 'cover' : 'smart';
+      if(f !== cfg.fit){
         cfg.fit = f;
         fitChanged = true;
       }
@@ -558,10 +628,8 @@ ENGINE = r"""
           '<div class="ym-hint">JPG, PNG, WEBP, GIF, AVIF, BMP · MP4, WEBM, MOV · .zip (Wallpaper Engine) · .html-обои</div>',
           '<label class="ym-switch-row"><span>Адаптивный фон — обложка играющего трека</span><input type="checkbox" class="ym-adapt"><span class="ym-switch"></span></label>',
           '<div class="ym-fitrow"><span>Масштаб</span><div class="ym-chips">',
-            '<button class="ym-chip ym-fit" data-fit="smart" title="Вся картинка, по краям — её размытая копия">Умно</button>',
-            '<button class="ym-chip ym-fit" data-fit="cover" title="Заполнить экран, края обрезаются">Заполнить</button>',
-            '<button class="ym-chip ym-fit" data-fit="contain" title="Вся картинка, по краям чёрные поля">Вписать</button>',
-            '<button class="ym-chip ym-fit" data-fit="stretch" title="Растянуть на весь экран">Растянуть</button>',
+            '<button class="ym-chip ym-fit" data-fit="smart" title="Кадр целиком, если окно сильно другой формы; иначе заполняет экран">Умно</button>',
+            '<button class="ym-chip ym-fit" data-fit="cover" title="Кадр всегда заполняет окно, лишнее по краям обрезается">Заполнить</button>',
           '</div></div>',
         '</section>',
       '</div>',
@@ -742,8 +810,7 @@ ENGINE = r"""
     var ptransV = q('.ym-ptransv'), pblurV = q('.ym-pblurv'), psatV = q('.ym-psatv');
     var adaptEl = q('.ym-adapt');
     var fitBtns = page.querySelectorAll('.ym-fit');
-    var fit = String(cfg.fit || 'smart');
-    if(['smart','cover','contain','stretch'].indexOf(fit) === -1) fit = 'smart';
+    var fit = String(cfg.fit || '') === 'cover' ? 'cover' : 'smart';
     var statusEl = q('.ym-status');
     var pushTimer = null;
     var galEl = q('.ym-gal');
@@ -1290,6 +1357,28 @@ function __ymBgUserDir(){
   return require('electron').app.getPath('userData');
 }
 
+// Папка с обоями пользователя: только фоны, без служебных файлов.
+function __ymBgWallDir(){
+  const path = require('node:path');
+  return path.join(__ymBgUserDir(), 'wallpapers');
+}
+
+// Служебные файлы мода: настройки, CSS, кэш превью и распакованных архивов.
+function __ymBgCacheDir(){
+  const path = require('node:path');
+  return path.join(process.env.LOCALAPPDATA || __ymBgUserDir(), 'YandexMusic-bg');
+}
+
+function __ymBgReadText(){
+  const fs = require('node:fs');
+  for(let i = 0; i < arguments.length; i++){
+    const p = arguments[i];
+    if(!p) continue;
+    try{ return fs.readFileSync(p, 'utf8') || ''; }catch(e){}
+  }
+  return '';
+}
+
 function __ymBgToken(){
   // Токен живёт только в памяти процесса. На диск он не попадает.
   if(!global.__ymBgToken){
@@ -1302,7 +1391,13 @@ function __ymBgToken(){
   return global.__ymBgToken;
 }
 
+function __ymBgCacheMediaDir(){
+  const path = require('node:path');
+  return path.join(__ymBgCacheDir(), 'media');
+}
+
 function __ymBgSafeMediaPath(dir, name){
+  const fs = require('node:fs');
   const path = require('node:path');
   const base = path.basename(String(name || ''));
   if(!base || base.charAt(0) === '.') return '';
@@ -1310,10 +1405,15 @@ function __ymBgSafeMediaPath(dir, name){
   const allowed = ['.jpg','.jpeg','.png','.webp','.gif','.avif','.bmp',
                    '.mp4','.webm','.mov','.m4v','.ogv'];
   if(allowed.indexOf(ext) === -1) return '';
-  const full = path.resolve(dir, base);
-  const rel = path.relative(dir, full);
-  if(!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
-  return full;
+  const dirs = [dir, __ymBgWallDir(), __ymBgUserDir(), __ymBgCacheMediaDir()];
+  for(let i = 0; i < dirs.length; i++){
+    if(!dirs[i]) continue;
+    const full = path.resolve(dirs[i], base);
+    const rel = path.relative(dirs[i], full);
+    if(!rel || rel.startsWith('..') || path.isAbsolute(rel)) continue;
+    try{ if(fs.statSync(full).isFile()) return full; }catch(e){}
+  }
+  return '';
 }
 
 function __ymBgMediaInfo(file){
@@ -1331,19 +1431,22 @@ function __ymBgReadPayload(){
   const __fs = require('node:fs');
   const __path = require('node:path');
   const __dir = __ymBgUserDir();
+  const __wall = __ymBgWallDir();
+  const __cache = __ymBgCacheDir();
 
   let __cfg = {};
   try{
-    let __raw = __fs.readFileSync(__path.join(__dir, 'custom-background.json'), 'utf8') || '';
-    __raw = __raw.replace(/^\uFEFF/, '');
+    const __raw = __ymBgReadText(__path.join(__cache, 'custom-background.json'),
+                                 __path.join(__dir, 'custom-background.json'))
+      .replace(/^\uFEFF/, '');
     __cfg = JSON.parse(__raw) || {};
   }catch(e){ __cfg = {}; }
 
   const __fileRaw = String(__cfg.file || '');
   const __fileBase = __path.basename(__fileRaw);
-  const __file = __ymBgSafeMediaPath(__dir, __fileBase) ? __fileBase : '';
+  const __file = __ymBgSafeMediaPath(__wall, __fileBase) ? __fileBase : '';
   const __info = __ymBgMediaInfo(__file);
-  const __full = __file ? __ymBgSafeMediaPath(__dir, __file) : '';
+  const __full = __file ? __ymBgSafeMediaPath(__wall, __file) : '';
 
   let __src = '';
   let __isVideo = false;
@@ -1361,10 +1464,16 @@ function __ymBgReadPayload(){
 
   let __css = '';
   try{
-    const __cssPath = __path.join(__dir, 'custom-background.css');
-    const __cssSt = __fs.statSync(__cssPath);
-    if(__cssSt.isFile() && __cssSt.size <= 1024 * 1024){
-      __css = __fs.readFileSync(__cssPath, 'utf8') || '';
+    const __cssCandidates = [__path.join(__cache, 'custom-background.css'),
+                             __path.join(__dir, 'custom-background.css')];
+    for(let i = 0; i < __cssCandidates.length; i++){
+      try{
+        const __cssSt = __fs.statSync(__cssCandidates[i]);
+        if(__cssSt.isFile() && __cssSt.size <= 1024 * 1024){
+          __css = __fs.readFileSync(__cssCandidates[i], 'utf8') || '';
+          break;
+        }
+      }catch(e){}
     }
   }catch(e){ __css = ''; }
 
@@ -1435,13 +1544,20 @@ function __ymBgStartServer(){
   const net = require('node:net');
   const dns = require('node:dns').promises;
   const dir = __ymBgUserDir();
+  const WALL_DIR = __ymBgWallDir();
   const PORT = 47823;
   const MAX = 2048 * 1024 * 1024;      // 2 ГБ: видео больше не упирается в 80 МБ
   const MAX_ZIP = 1024 * 1024 * 1024;  // архив обоев
   const MAX_JSON = 8 * 1024 * 1024;    // обычные настройки
   const ALLOWED_ORIGIN = 'music-application://desktop';
   const ALLOWED_EXT = ['.jpg','.png','.webp','.gif','.avif','.bmp','.mp4','.webm','.mov','.m4v','.ogv'];
-  const WEB_DIR = path.join(dir, 'web-wallpaper');
+  // Папка с обоями пользователя — только фоны. Всё, что мод создаёт сам
+  // (настройки, CSS, превью, HTML-обои, распакованные из архивов файлы),
+  // лежит в отдельной папке в LocalAppData.
+  const CACHE_DIR = __ymBgCacheDir();
+  const CFG_DIR = CACHE_DIR;
+  const MEDIA_DIR = path.join(CACHE_DIR, 'media');
+  const WEB_DIR = path.join(CACHE_DIR, 'web');
   const MIME = {
     '.html':'text/html; charset=utf-8', '.htm':'text/html; charset=utf-8',
     '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8',
@@ -1478,61 +1594,194 @@ function __ymBgStartServer(){
     return out;
   }
 
+  // Масштаб: два варианта. «Умно» — кадр целиком, поля закрывает размытая
+  // копия; «Заполнить» — cover, лишнее по краям обрезается.
+  function normalizeFit(v){
+    const f = String(v || '').toLowerCase();
+    return f === 'cover' ? 'cover' : 'smart';
+  }
   function readCfg(){
     try{
-      const p = path.join(dir, 'custom-background.json');
-      const st = fs.statSync(p);
-      if(!st.isFile() || st.size > 1024 * 1024) return {};
-      let raw = fs.readFileSync(p, 'utf8') || '';
-      raw = raw.replace(/^\uFEFF/, '');
-      const cfg = JSON.parse(raw);
-      if(!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return {};
-      return clampNumbers(cfg);
+      const candidates = [path.join(CFG_DIR, 'custom-background.json'),
+                          path.join(dir, 'custom-background.json')];
+      for(let i = 0; i < candidates.length; i++){
+        let raw = '';
+        try{
+          const st = fs.statSync(candidates[i]);
+          if(!st.isFile() || st.size > 1024 * 1024) continue;
+          raw = fs.readFileSync(candidates[i], 'utf8') || '';
+        }catch(e){ continue; }
+        raw = raw.replace(/^\uFEFF/, '');
+        const cfg = JSON.parse(raw);
+        if(!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return {};
+        return clampNumbers(cfg);
+      }
+      return {};
     }catch(e){ return {}; }
   }
   function writeCfg(cfg){
-    const target = path.join(dir, 'custom-background.json');
-    const tmp = path.join(dir, '.custom-background.json.tmp');
+    try{ fs.mkdirSync(CFG_DIR, {recursive: true}); }catch(e){}
+    const target = path.join(CFG_DIR, 'custom-background.json');
+    const tmp = path.join(CFG_DIR, '.custom-background.json.tmp');
     fs.writeFileSync(tmp, JSON.stringify(clampNumbers(cfg), null, 2), 'utf8');
     fs.renameSync(tmp, target);
   }
   const VIDEO_EXT = ['.mp4','.webm','.mov','.m4v','.ogv'];
   const IMAGE_EXT = ['.jpg','.jpeg','.png','.webp','.gif','.avif','.bmp'];
   const LIB_EXT = IMAGE_EXT.concat(VIDEO_EXT, ['.zip','.html','.htm']);
-  const THUMB_DIR = path.join(dir, 'thumbs');
+  const THUMB_DIR = path.join(CACHE_DIR, 'thumbs');
+  const TMP_DIR = path.join(CACHE_DIR, 'tmp');
+  // Всё, что не является фоном и лежало в папке обоев, переезжает сюда:
+  // архивы, старые HTML-обои, служебные файлы сторонних программ.
+  const IMPORT_DIR = path.join(CACHE_DIR, 'legacy');
+  // Архивы обоев (.zip, .html) живут отдельно от папки фонов, но видны
+  // в галерее «Мои фоны» — папка обоев остаётся только с картинками и видео.
+  const ARCHIVE_DIR = path.join(CACHE_DIR, 'archives');
 
-  function cleanTmp(){
+  function ensureDirs(){
+    [CACHE_DIR, CFG_DIR, MEDIA_DIR, WEB_DIR, THUMB_DIR, TMP_DIR, IMPORT_DIR, ARCHIVE_DIR, WALL_DIR].forEach(function(d){
+      try{ fs.mkdirSync(d, {recursive: true}); }catch(e){}
+    });
+  }
+
+  function moveFile(src, dst){
+    try{
+      if(fs.existsSync(dst)){ fs.unlinkSync(src); return; }
+      fs.renameSync(src, dst);
+    }catch(e){
+      try{ fs.copyFileSync(src, dst); fs.unlinkSync(src); }catch(_){}
+    }
+  }
+
+  // Новая раскладка: фоны живут отдельной папкой, служебные файлы старых
+  // версий из корневой папки переезжают в кэш.
+  function migrateLayout(){
     try{
       fs.readdirSync(dir).forEach(function(n){
-        if(/^\.ymbg-tmp-/.test(n) || /^\.custom-background\.json\.tmp$/.test(n)){
-          try{ fs.unlinkSync(path.join(dir, n)); }catch(e){}
+        const src = path.join(dir, n);
+        let st;
+        try{ st = fs.statSync(src); }catch(e){ return; }
+        if(!st.isFile()) return;
+        if(/^\.ymbg-tmp-/.test(n) || /^\.custom-background/i.test(n) && /\.tmp$/i.test(n)){
+          try{ fs.unlinkSync(src); }catch(e){}
+          return;
+        }
+        if(LIB_EXT.indexOf(path.extname(n).toLowerCase()) !== -1){
+          moveFile(src, path.join(WALL_DIR, n));
+          return;
+        }
+        if(/^custom-background\.(json|css)(\.|$)/i.test(n)){
+          moveFile(src, path.join(CFG_DIR, n));
         }
       });
     }catch(e){}
+    try{
+      const legacyWeb = path.join(dir, 'web-wallpaper');
+      if(fs.existsSync(legacyWeb)){
+        fs.readdirSync(legacyWeb).forEach(function(n){
+          try{ moveFile(path.join(legacyWeb, n), path.join(WEB_DIR, n)); }catch(e){}
+        });
+        try{ fs.rmdirSync(legacyWeb); }catch(e){}
+      }
+    }catch(e){}
+    try{
+      const legacyThumbs = path.join(dir, 'thumbs');
+      if(fs.existsSync(legacyThumbs)) fs.rmSync(legacyThumbs, {recursive: true, force: true});
+    }catch(e){}
   }
-  function safeUserFile(name, exts){
-    const base = path.basename(String(name || ''));
-    if(!base || base.charAt(0) === '.') return '';
-    const ext = path.extname(base).toLowerCase();
+
+  // Папка обоев — только фоны. Архив или HTML, положенный туда руками,
+  // сразу ставится фоном (распаковывается в кэш) и из папки убирается.
+  // Всё прочее, что не картинка и не видео, переезжает в кэш без удаления.
+  function isBackgroundFile(name){
+    const ext = path.extname(String(name || '')).toLowerCase();
+    return IMAGE_EXT.indexOf(ext) !== -1 || VIDEO_EXT.indexOf(ext) !== -1;
+  }
+
+  function sweepWallDir(){
+    let moved = 0;
+    try{
+      fs.mkdirSync(IMPORT_DIR, {recursive: true});
+    }catch(e){}
+    let names = [];
+    try{ names = fs.readdirSync(WALL_DIR); }catch(e){ names = []; }
+    for(let i = 0; i < names.length; i++){
+      const n = names[i];
+      if(!n || n.charAt(0) === '.') continue;
+      const src = path.join(WALL_DIR, n);
+      let st;
+      try{ st = fs.statSync(src); }catch(e){ continue; }
+      if(st.isDirectory()){
+        try{ fs.renameSync(src, path.join(IMPORT_DIR, n)); moved++; }catch(e){}
+        continue;
+      }
+      if(!st.isFile()) continue;
+      const ext = path.extname(n).toLowerCase();
+      if(isBackgroundFile(n)) continue;
+
+      // .zip и .html — фон, просто упакованный. Он переезжает в отдельную
+      // папку архивов и остаётся виден в галерее «Мои фоны».
+      if(ext === '.zip' || ext === '.html' || ext === '.htm'){
+        const adst = path.join(ARCHIVE_DIR, n);
+        if(!fs.existsSync(adst)){
+          try{ fs.renameSync(src, adst); moved++; continue; }
+          catch(e){ try{ fs.copyFileSync(src, adst); fs.unlinkSync(src); moved++; continue; }catch(_){} }
+        } else {
+          try{ fs.unlinkSync(src); }catch(e){}
+          continue;
+        }
+      }
+
+      const dst = path.join(IMPORT_DIR, n);
+      if(fs.existsSync(dst)){ try{ fs.unlinkSync(src); }catch(e){} continue; }
+      try{ fs.renameSync(src, dst); moved++; }
+      catch(e){
+        try{ fs.copyFileSync(src, dst); fs.unlinkSync(src); moved++; }catch(_){}
+      }
+    }
+    return moved;
+  }
+
+  function cleanTmp(){    // Временные загрузки держим в кэше; заодно убираем хвосты старой версии
+    // из папки с обоями.
+    try{
+      fs.readdirSync(TMP_DIR).forEach(function(n){
+        try{ fs.unlinkSync(path.join(TMP_DIR, n)); }catch(e){}
+      });
+    }catch(e){}
+    try{
+      [dir, CFG_DIR].forEach(function(base){
+        try{
+          fs.readdirSync(base).forEach(function(n){
+            if(/^\.ymbg-tmp-/.test(n) || /^\.custom-background\.json\.tmp$/.test(n)){
+              try{ fs.unlinkSync(path.join(base, n)); }catch(e){}
+            }
+          });
+        }catch(e){}
+      });
+    }catch(e){}
+  }
+  function safeFileIn(base, name, exts){
+    const baseName = path.basename(String(name || ''));
+    if(!baseName || baseName.charAt(0) === '.') return '';
+    const ext = path.extname(baseName).toLowerCase();
     if((exts || ALLOWED_EXT).indexOf(ext) === -1) return '';
-    const full = path.resolve(dir, base);
-    const rel = path.relative(dir, full);
+    const full = path.resolve(base, baseName);
+    const rel = path.relative(base, full);
     if(!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
     try{ if(!fs.statSync(full).isFile()) return ''; }catch(e){ return ''; }
     return full;
   }
-
-  // Загруженные архивы и HTML-обои больше не удаляем: они остаются в папке
-  // и попадают в галерею «Мои фоны».
-  function keepWallpaperCopy(src, ext){
-    const name = 'wallpaper-' + crypto.randomBytes(4).toString('hex') + ext;
-    const target = path.join(dir, name);
-    try{ fs.renameSync(src, target); }
-    catch(e){
-      fs.copyFileSync(src, target);
-      try{ fs.unlinkSync(src); }catch(_){}
-    }
-    return target;
+  function safeUserFile(name, exts){
+    // Фоны ищутся в папке обоев; архивы — в своей папке; корень профиля
+    // проверяем только ради файлов, которые ещё не успели переехать.
+    return safeFileIn(WALL_DIR, name, exts) ||
+           safeFileIn(ARCHIVE_DIR, name, exts) ||
+           safeFileIn(dir, name, exts);
+  }
+  // Файлы, извлечённые из архивов, лежат в кэше — ищем и там.
+  function safeMediaFile(name, exts){
+    return safeUserFile(name, exts) || safeFileIn(MEDIA_DIR, name, exts);
   }
   function thumbDir(){
     try{ fs.mkdirSync(THUMB_DIR, {recursive: true}); }catch(e){}
@@ -1598,30 +1847,44 @@ function __ymBgStartServer(){
     const cfg = readCfg();
     const activeFile = cfg.file ? path.basename(String(cfg.file)) : '';
     const activeLib = cfg.lib ? path.basename(String(cfg.lib)) : '';
-    let names = [];
-    try{ names = fs.readdirSync(dir); }catch(e){ names = []; }
     const out = [];
-    for(let i = 0; i < names.length; i++){
-      const name = names[i];
-      if(!name || name.charAt(0) === '.') continue;
-      const ext = path.extname(name).toLowerCase();
-      if(LIB_EXT.indexOf(ext) === -1) continue;
-      let st;
-      try{ st = fs.statSync(path.join(dir, name)); }catch(e){ continue; }
-      if(!st.isFile() || !st.size) continue;
-      const kind = VIDEO_EXT.indexOf(ext) !== -1 ? 'video' :
-                   IMAGE_EXT.indexOf(ext) !== -1 ? 'image' :
-                   (ext === '.zip' ? 'archive' : 'html');
-      out.push({
-        name: name,
-        kind: kind,
-        size: st.size,
-        mtime: Math.round(st.mtimeMs || st.mtime || 0),
-        active: activeLib ? (name === activeLib) : (name === activeFile)
-      });
-    }
+    // Папка фонов: картинки и видео.
+    const collect = function(base, exts){
+      let names = [];
+      try{ names = fs.readdirSync(base); }catch(e){ names = []; }
+      for(let i = 0; i < names.length; i++){
+        const name = names[i];
+        if(!name || name.charAt(0) === '.') continue;
+        const ext = path.extname(name).toLowerCase();
+        if(exts.indexOf(ext) === -1) continue;
+        let st;
+        try{ st = fs.statSync(path.join(base, name)); }catch(e){ continue; }
+        if(!st.isFile() || !st.size) continue;
+        const kind = VIDEO_EXT.indexOf(ext) !== -1 ? 'video' :
+                     IMAGE_EXT.indexOf(ext) !== -1 ? 'image' :
+                     (ext === '.zip' ? 'archive' : 'html');
+        out.push({
+          name: name,
+          kind: kind,
+          size: st.size,
+          mtime: Math.round(st.mtimeMs || st.mtime || 0),
+          active: activeLib ? (name === activeLib) : (name === activeFile)
+        });
+      }
+    };
+    collect(WALL_DIR, IMAGE_EXT.concat(VIDEO_EXT, ['.zip','.html','.htm']));
+    // Папка архивов: сюда попадают zip и html, найденные в папке фонов.
+    collect(ARCHIVE_DIR, ['.zip','.html','.htm']);
     out.sort(function(a, b){ return b.mtime - a.mtime; });
     return out.slice(0, 300);
+  }
+  // Имя файла из ссылки: «clip.mp4» с сайта останется «clip.mp4».
+  function nameFromUrl(u){
+    try{
+      const p = new URL(String(u)).pathname || '';
+      const last = p.split('/').filter(Boolean).pop() || '';
+      return decodeURIComponent(last);
+    }catch(e){ return ''; }
   }
   function extFromType(type){
     const t = String(type || '').toLowerCase().split(';')[0].trim();
@@ -1809,10 +2072,43 @@ function __ymBgStartServer(){
   function mediaName(ext){
     return 'custom-background-' + crypto.randomBytes(4).toString('hex') + ext;
   }
-  function adoptMedia(tmpPath, ext){
+  // Имя из файла пользователя: «Мой клип.mp4» остаётся «Мой клип.mp4».
+  function stemOf(raw){
+    let base = path.basename(String(raw || ''));
+    try{ base = decodeURIComponent(base); }catch(e){}
+    base = base.replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+    base = base.replace(/^\.+/, '');
+    if(!base) return '';
+    const ext = path.extname(base);
+    const stem = ext ? base.slice(0, base.length - ext.length) : base;
+    return stem.slice(0, 70).trim();
+  }
+  function adoptMedia(tmpPath, ext, rawName){
     if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается');
-    const name = mediaName(ext);
-    const target = path.join(dir, name);
+    const stem = stemOf(rawName);
+    const size = (function(){ try{ return fs.statSync(tmpPath).size; }catch(e){ return 0; } })();
+    let name = '';
+    if(stem){
+      for(let i = 0; i < 60; i++){
+        const candidate = (i ? stem + '-' + (i + 1) : stem) + ext;
+        const full = path.join(WALL_DIR, candidate);
+        try{
+          const st = fs.statSync(full);
+          if(st.isFile()){
+            // Такой же файл уже лежит в папке — второй экземпляр не нужен.
+            if(size && st.size === size){
+              try{ fs.unlinkSync(tmpPath); }catch(e){}
+              return {name: candidate, bytes: st.size};
+            }
+            continue;
+          }
+        }catch(e){}
+        name = candidate;
+        break;
+      }
+    }
+    if(!name) name = mediaName(ext);
+    const target = path.join(WALL_DIR, name);
     try{ fs.renameSync(tmpPath, target); }
     catch(e){
       fs.copyFileSync(tmpPath, target);
@@ -1958,7 +2254,7 @@ function __ymBgStartServer(){
         const sniff = sniffExt(data);
         if(sniff && ALLOWED_EXT.indexOf(sniff) !== -1 && sniff !== ext &&
            !(sniff === '.mp4' && ext === '.m4v')) ext = sniff;
-        const w = writeMedia(data, ext, 'custom-background-' + zipKey + ext);
+        const w = writeMedia(data, ext, 'custom-background-' + zipKey + ext, MEDIA_DIR);
         return {kind: 'media', file: w.name, bytes: w.bytes};
       }
     }
@@ -1973,7 +2269,7 @@ function __ymBgStartServer(){
     if(pv){
       const data = zipEntry(buf, pv);
       const ext = path.extname(pv.name).toLowerCase() === '.png' ? '.png' : (path.extname(pv.name).toLowerCase() === '.gif' ? '.gif' : '.jpg');
-      const w = writeMedia(data, ext, 'custom-background-' + zipKey + ext);
+      const w = writeMedia(data, ext, 'custom-background-' + zipKey + ext, MEDIA_DIR);
       return {kind: 'media', file: w.name, bytes: w.bytes,
         note: 'Wallpaper Engine: сцену без движка не проиграть — поставил ' +
               (ext === '.gif' ? 'анимированное превью (GIF)' : 'превью картинкой')};
@@ -2042,7 +2338,8 @@ function __ymBgStartServer(){
   let tmpSeq = 0;
   function tempPath(ext){
     tmpSeq++;
-    return path.join(dir, '.ymbg-tmp-' + process.pid + '-' + Date.now() + '-' + tmpSeq + (ext || ''));
+    try{ fs.mkdirSync(TMP_DIR, {recursive: true}); }catch(e){}
+    return path.join(TMP_DIR, 'ymbg-' + process.pid + '-' + Date.now() + '-' + tmpSeq + (ext || ''));
   }
 
   async function fetchToTemp(url, max, ext){
@@ -2079,7 +2376,7 @@ function __ymBgStartServer(){
       throw new Error('ссылка ведёт не на картинку или видео');
     }
     if(sniff && sniff !== ext && !(sniff === '.mp4' && ext === '.m4v')) ext = sniff;
-    const w = adoptMedia(got.path, ext);
+    const w = adoptMedia(got.path, ext, nameFromUrl(got.finalUrl || url));
     return {kind: 'media', file: w.name, bytes: w.bytes};
   }
 
@@ -2106,18 +2403,20 @@ function __ymBgStartServer(){
       if(ext === '.zip'){
         const tmpZip = tempPath('.zip');
         fs.copyFileSync(src, tmpZip);
-        return await handleWallpaperZip(keepWallpaperCopy(tmpZip, '.zip'));
+        try{ return await handleWallpaperZip(tmpZip); }
+        finally{ try{ if(fs.existsSync(tmpZip)) fs.unlinkSync(tmpZip); }catch(e){} }
       }
       if(ext === '.html' || ext === '.htm'){
         const tmpHtml = tempPath(ext);
         fs.copyFileSync(src, tmpHtml);
-        return {kind: 'web', web: installWebFile(keepWallpaperCopy(tmpHtml, ext)), note: 'HTML-обои'};
+        try{ return {kind: 'web', web: installWebFile(tmpHtml), note: 'HTML-обои'}; }
+        finally{ try{ if(fs.existsSync(tmpHtml)) fs.unlinkSync(tmpHtml); }catch(e){} }
       }
       if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается: ' + ext);
       if(st.size > MAX) throw new Error('файл больше 2 ГБ');
       const tmp = tempPath(ext);
       fs.copyFileSync(src, tmp);
-      const w = adoptMedia(tmp, ext);
+      const w = adoptMedia(tmp, ext, path.basename(src));
       return {kind: 'media', file: w.name, bytes: w.bytes};
     }
 
@@ -2150,7 +2449,7 @@ function __ymBgStartServer(){
       if(ext === '.jpeg') ext = '.jpg';
       if(ext && ALLOWED_EXT.indexOf(ext) !== -1){
         if(sniff && sniff !== ext) ext = sniff;
-        const w = adoptMedia(got.path, ext);
+        const w = adoptMedia(got.path, ext, nameFromUrl(got.finalUrl || u.toString()));
         return {kind: 'media', file: w.name, bytes: w.bytes};
       }
       throw new Error('ссылка ведёт не на картинку, видео или архив');
@@ -2266,9 +2565,9 @@ function __ymBgStartServer(){
   function allowedFileRoots(){
     try{
       const { app } = require('electron');
-      return [dir, app.getPath('pictures'), app.getPath('downloads'), app.getPath('desktop'), app.getPath('videos')]
+      return [WALL_DIR, dir, app.getPath('pictures'), app.getPath('downloads'), app.getPath('desktop'), app.getPath('videos')]
         .filter(Boolean).map(function(p){ return path.resolve(p); });
-    }catch(e){ return [path.resolve(dir)]; }
+    }catch(e){ return [path.resolve(WALL_DIR), path.resolve(dir)]; }
   }
   function isInside(root, full){
     const rel = path.relative(path.resolve(root), full);
@@ -2292,10 +2591,12 @@ function __ymBgStartServer(){
     if(st.size > MAX) throw new Error('файл больше 2 ГБ');
     return {real: real, st: st};
   }
-  function writeMedia(buf, ext, name){
+  function writeMedia(buf, ext, name, targetDir){
     if(ALLOWED_EXT.indexOf(ext) === -1) throw new Error('формат не поддерживается');
+    const base = targetDir || dir;
+    try{ fs.mkdirSync(base, {recursive: true}); }catch(e){}
     const fileName = name || mediaName(ext);
-    const target = path.join(dir, fileName);
+    const target = path.join(base, fileName);
     fs.writeFileSync(target, buf);
     return {name: fileName, bytes: buf.length};
   }
@@ -2303,7 +2604,7 @@ function __ymBgStartServer(){
   async function handleApply(d){
     if(!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('некорректный запрос');
     const cfg = readCfg();
-    const existing = __ymBgSafeMediaPath(dir, cfg.file) ? path.basename(String(cfg.file)) : '';
+    const existing = __ymBgSafeMediaPath(WALL_DIR, cfg.file) ? path.basename(String(cfg.file)) : '';
     let fileName = existing;
     let saved = 0;
     let mediaChanged = false;
@@ -2327,7 +2628,8 @@ function __ymBgStartServer(){
       if(buf.length > 64 * 1024 * 1024) throw new Error('файл больше 64 МБ');
       const sniff = sniffExt(buf);
       if(!sniff) throw new Error('формат не поддерживается');
-      const w = writeMedia(buf, sniff);
+      // У вставленного из буфера файла нет имени — кладём его в кэш, папку не засоряем.
+      const w = writeMedia(buf, sniff, '', MEDIA_DIR);
       fileName = w.name; saved = w.bytes; mediaChanged = true;
     } else if(d.url !== undefined && d.url !== ''){
       const out = await resolveSource(String(d.url));
@@ -2354,7 +2656,8 @@ function __ymBgStartServer(){
       if(picked.st.size > MAX) throw new Error('файл больше 2 ГБ');
       const tmp = tempPath(ext);
       fs.copyFileSync(picked.real, tmp);
-      const w = adoptMedia(tmp, ext);
+      // Выбранный из папки файл остаётся с читаемым именем и не дублируется.
+      const w = adoptMedia(tmp, ext, path.basename(picked.real));
       fileName = w.name; saved = w.bytes; mediaChanged = true;
     }
 
@@ -2369,8 +2672,7 @@ function __ymBgStartServer(){
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
     else if(mediaChanged) cfg.adaptive = false;
     if(d.fit !== undefined){
-      const f = String(d.fit || '');
-      if(['smart','cover','contain','stretch'].indexOf(f) !== -1) cfg.fit = f;
+      cfg.fit = normalizeFit(d.fit);
     }
     writeCfg(cfg);
 
@@ -2409,7 +2711,7 @@ function __ymBgStartServer(){
       try{
         const { shell } = require('electron');
         if(shell && typeof shell.openPath === 'function'){
-          err = String(await shell.openPath(dir) || '');
+          err = String(await shell.openPath(WALL_DIR) || '');
         } else {
           err = 'no shell';
         }
@@ -2417,19 +2719,20 @@ function __ymBgStartServer(){
       if(err){
         try{
           const { spawn } = require('node:child_process');
-          const child = spawn('explorer.exe', [dir], {detached: true, stdio: 'ignore', windowsHide: true});
+          const child = spawn('explorer.exe', [WALL_DIR], {detached: true, stdio: 'ignore', windowsHide: true});
           child.on('error', function(){});
           child.unref();
           err = '';
         }catch(e){ err = String((e && e.message) || e); }
       }
       if(err) return reply(res, 500, {ok: false, error: err});
-      return reply(res, 200, {ok: true, dir: dir});
+      return reply(res, 200, {ok: true, dir: WALL_DIR});
     }
     if(req.method === 'GET' && u === '/library'){
       if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
       try{
-        return reply(res, 200, {ok: true, dir: dir, items: libraryItems()});
+        sweepWallDir();
+        return reply(res, 200, {ok: true, dir: WALL_DIR, items: libraryItems()});
       }catch(e){
         return reply(res, 500, {ok: false, error: String((e && e.message) || e)});
       }
@@ -2450,7 +2753,7 @@ function __ymBgStartServer(){
       if(!tokenEquals(queryToken(req), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
       const want = queryParam(req, 'f');
       const cfg = readCfg();
-      const full = want ? safeUserFile(want, ALLOWED_EXT) : __ymBgSafeMediaPath(dir, cfg.file);
+      const full = want ? safeMediaFile(want, ALLOWED_EXT) : __ymBgSafeMediaPath(WALL_DIR, cfg.file);
       if(!full) return reply(res, 404, {ok: false, error: 'no media'});
       return serveFile(req, res, full, full);
     }
@@ -2487,21 +2790,33 @@ function __ymBgStartServer(){
           let name = String(req.headers['x-ymbg-name'] || '');
           try{ name = decodeURIComponent(name); }catch(e){}
           const ext = path.extname(name).toLowerCase();
+          if(ext === '.zip' || ext === '.html' || ext === '.htm'){
+            // Оригинал архива остаётся в отдельной папке и виден в галерее;
+            // в папку фонов он не попадает.
+            try{
+              const safeName = path.basename(name).replace(/[\\/:*?"<>|]/g, '_');
+              if(safeName && safeName.charAt(0) !== '.'){
+                const adst = path.join(ARCHIVE_DIR, safeName);
+                if(!fs.existsSync(adst)) fs.copyFileSync(tmp, adst);
+              }
+            }catch(e){}
+          }
           if(ext === '.html' || ext === '.htm'){
-            const kept = keepWallpaperCopy(tmp, ext);
-            out = {kind: 'web', web: installWebFile(kept), bytes: saved.bytes, note: 'HTML-обои'};
+            // HTML-обои распаковываются в кэш: в папке пользователя остаются только его фоны.
+            out = {kind: 'web', web: installWebFile(tmp), bytes: saved.bytes, note: 'HTML-обои'};
           } else if(ext === '.zip'){
-            out = handleWallpaperZip(keepWallpaperCopy(tmp, '.zip'));
+            out = handleWallpaperZip(tmp);
           } else {
             const sniff = sniffExt(saved.head) || (ALLOWED_EXT.indexOf(ext) !== -1 ? ext : '');
             if(!sniff) throw new Error('формат не поддерживается');
-            const w = adoptMedia(tmp, sniff);
+            const w = adoptMedia(tmp, sniff, name);
             out = {kind: 'media', file: w.name, bytes: w.bytes};
           }
         } else {
           const sniff = sniffExt(saved.head);
           if(!sniff || ALLOWED_EXT.indexOf(sniff) === -1) throw new Error('формат не поддерживается');
-          const w = adoptMedia(tmp, sniff);
+          const rawName = String(req.headers['x-ymbg-name'] || '');
+          const w = adoptMedia(tmp, sniff, rawName);
           out = {kind: 'media', file: w.name, bytes: w.bytes};
           const info = __ymBgMediaInfo(w.name);
           out.isVideo = !!info.isVideo;
@@ -2603,6 +2918,9 @@ function __ymBgStartServer(){
   srv.on('error', function(e){
     try{ console.error('[ymbg] server error:', (e && e.message) || e); }catch(_){}
   });
+  try{ ensureDirs(); }catch(e){}
+  try{ migrateLayout(); }catch(e){}
+  try{ sweepWallDir(); }catch(e){}
   try{ cleanTmp(); }catch(e){}
   try{ srv.listen(PORT, '127.0.0.1'); }
   catch(e){ try{ console.error('[ymbg] listen failed:', (e && e.message) || e); }catch(_){} }

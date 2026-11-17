@@ -6,7 +6,9 @@
 
 $ErrorActionPreference = "Stop"
 $userDir = Join-Path $env:APPDATA "YandexMusic"
-$jsonPath = Join-Path $userDir "custom-background.json"
+$wallDir = Join-Path $userDir "wallpapers"
+$cacheDir = Join-Path $env:LOCALAPPDATA "YandexMusic-bg"
+$jsonPath = Join-Path $cacheDir "custom-background.json"
 $appDir = Join-Path $env:LOCALAPPDATA "Programs\YandexMusic"
 
 function Get-MusicProcesses {
@@ -53,19 +55,34 @@ if ($size -gt 2GB) { throw ("Файл слишком большой: {0:N1} МБ
 if ($size -le 0) { throw "Файл пустой" }
 
 New-Item -ItemType Directory -Force -Path $userDir | Out-Null
+New-Item -ItemType Directory -Force -Path $wallDir | Out-Null
+New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+
+# Старая раскладка: фоны из корня профиля переезжают в wallpapers.
+Get-ChildItem $userDir -File -ErrorAction SilentlyContinue | Where-Object {
+    $_.Extension.ToLower() -in @(".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp",
+                                 ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".zip", ".html", ".htm")
+} | ForEach-Object {
+    $dst = Join-Path $wallDir $_.Name
+    if (Test-Path -LiteralPath $dst) {
+        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+    } else {
+        Move-Item -LiteralPath $_.FullName -Destination $dst -Force -ErrorAction SilentlyContinue
+    }
+}
 
 $fileName = "custom-background" + $ext
-$dst = Join-Path $userDir $fileName
+$dst = Join-Path $wallDir $fileName
 
 if (-not ($src -eq $dst)) {
-    $tmp = Join-Path $userDir (".custom-background.tmp" + $ext)
+    $tmp = Join-Path $wallDir (".custom-background.tmp" + $ext)
     Copy-Item -LiteralPath $src -Destination $tmp -Force
     Move-Item -LiteralPath $tmp -Destination $dst -Force
 }
 
 # Убираем прежние фоны только после успешной замены.
-Get-ChildItem -LiteralPath $userDir -Filter "custom-background*" -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.Extension -notin @(".css", ".json", ".bak") -and $_.FullName -ne $dst } |
+Get-ChildItem -LiteralPath $wallDir -Filter "custom-background*" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -ne $dst } |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
 # Конфиг: свой фон вместо адаптивного.

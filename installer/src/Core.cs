@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -25,12 +25,28 @@ namespace YMBG
     /// <summary>Вся работа установщика: поиск клиента,apply/restore, файлы пользователя.</summary>
     internal static class Core
     {
-        public const string InstallerVersion = "2.0.0";
+        public const string InstallerVersion = "2.1.0";
         public const string AppName = "Яндекс Музыка";
 
         public static string UserDir
         {
             get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "YandexMusic"); }
+        }
+
+        /// <summary>Папка с обоями пользователя: только фоны, без служебных файлов.</summary>
+        public static string WallDir
+        {
+            get { return Path.Combine(UserDir, "wallpapers"); }
+        }
+
+        /// <summary>Служебные файлы мода: настройки, CSS, кэш превью и архивов.</summary>
+        public static string CacheDir
+        {
+            get
+            {
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "YandexMusic-bg");
+            }
         }
 
         public static string DetectAppDir(string hint)
@@ -255,15 +271,19 @@ namespace YMBG
 
         private static void ApplyUserFiles(Action<string> log)
         {
-            string dir = UserDir;
+            string dir = CacheDir;
+            string wall = WallDir;
             try
             {
                 Directory.CreateDirectory(dir);
+                Directory.CreateDirectory(wall);
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException("Не удалось создать папку " + dir + ": " + ex.Message, ex);
             }
+
+            MigrateLegacy(log);
 
             string css = Path.Combine(dir, "custom-background.css");
             if (File.Exists(css))
@@ -299,30 +319,101 @@ namespace YMBG
 
             RemoveLegacy(log);
 
-            if (!HasCustomBackground(dir))
+            if (!HasCustomBackground(wall))
             {
                 log("Свой фон пока не выбран — открой вкладку «Фон» в Музыке.");
             }
         }
 
-        private static bool HasCustomBackground(string dir)
+        private static bool HasCustomBackground(string wallDir)
         {
+            string[] exts = new string[] { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp",
+                ".mp4", ".webm", ".mov", ".m4v", ".ogv" };
             try
             {
-                foreach (string path in Directory.GetFiles(dir, "custom-background*"))
+                foreach (string path in Directory.GetFiles(wallDir))
                 {
-                    string ext = Path.GetExtension(path).ToLowerInvariant();
-                    if (ext == ".css" || ext == ".json" || ext == ".bak")
+                    if (Array.IndexOf(exts, Path.GetExtension(path).ToLowerInvariant()) >= 0)
                     {
-                        continue;
+                        return true;
                     }
-                    return true;
                 }
             }
             catch
             {
             }
             return false;
+        }
+
+        /// <summary>Старая раскладка: фоны лежали в корне профиля вместе со служебными файлами.</summary>
+        private static void MigrateLegacy(Action<string> log)
+        {
+            string src = UserDir;
+            if (!Directory.Exists(src))
+            {
+                return;
+            }
+            string[] mediaExt = new string[] { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp",
+                ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".zip", ".html", ".htm" };
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(src);
+            }
+            catch
+            {
+                return;
+            }
+            int moved = 0;
+            for (int i = 0; i < files.Length; i++)
+            {
+                string name = Path.GetFileName(files[i]);
+                string ext = Path.GetExtension(name).ToLowerInvariant();
+                bool isMedia = Array.IndexOf(mediaExt, ext) >= 0;
+                bool isModFile = name.StartsWith("custom-background_", StringComparison.OrdinalIgnoreCase) ||
+                                 name.StartsWith("custom-background.", StringComparison.OrdinalIgnoreCase) ||
+                                 name.StartsWith(".custom-background", StringComparison.OrdinalIgnoreCase);
+                if (!isMedia && !isModFile)
+                {
+                    continue;
+                }
+                string dst = Path.Combine(isMedia ? WallDir : CacheDir, name);
+                try
+                {
+                    if (File.Exists(dst))
+                    {
+                        File.Delete(files[i]);
+                    }
+                    else
+                    {
+                        File.Move(files[i], dst);
+                    }
+                    moved++;
+                }
+                catch
+                {
+                }
+            }
+            if (moved > 0)
+            {
+                log("Фоны из корневой папки перенесены в wallpapers, служебные файлы — в кэш.");
+            }
+            try
+            {
+                string web = Path.Combine(src, "web-wallpaper");
+                if (Directory.Exists(web))
+                {
+                    Directory.Delete(web, true);
+                }
+                string thumbs = Path.Combine(src, "thumbs");
+                if (Directory.Exists(thumbs))
+                {
+                    Directory.Delete(thumbs, true);
+                }
+            }
+            catch
+            {
+            }
         }
 
         public static void RemoveLegacy(Action<string> log)
@@ -348,26 +439,44 @@ namespace YMBG
         public static void DeleteSettings()
         {
             string dir = UserDir;
-            if (!Directory.Exists(dir))
+            if (Directory.Exists(dir))
             {
-                return;
-            }
-            foreach (string path in Directory.GetFiles(dir, "custom-background*"))
-            {
+                foreach (string path in Directory.GetFiles(dir, "custom-background*"))
+                {
+                    try
+                    {
+                        File.Delete(path);
+                    }
+                    catch
+                    {
+                    }
+                }
                 try
                 {
-                    File.Delete(path);
+                    string web = Path.Combine(dir, "web-wallpaper");
+                    if (Directory.Exists(web))
+                    {
+                        Directory.Delete(web, true);
+                    }
+                    string thumbs = Path.Combine(dir, "thumbs");
+                    if (Directory.Exists(thumbs))
+                    {
+                        Directory.Delete(thumbs, true);
+                    }
                 }
                 catch
                 {
                 }
             }
+            // Кэш мода (превью, распакованные из архивов фоны, HTML-обои) живёт
+            // в LocalAppData и в папке пользователя не остаётся.
             try
             {
-                string web = Path.Combine(dir, "web-wallpaper");
-                if (Directory.Exists(web))
+                string cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "YandexMusic-bg");
+                if (Directory.Exists(cache))
                 {
-                    Directory.Delete(web, true);
+                    Directory.Delete(cache, true);
                 }
             }
             catch

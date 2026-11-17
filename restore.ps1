@@ -113,6 +113,23 @@ foreach ($name in @("ymbg.token", "YMBackground.ps1")) {
     }
 }
 
+# Служебные файлы мода из корня профиля. Папку wallpapers с фонами не трогаем.
+Get-ChildItem $userDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "custom-background.*" } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+foreach ($sub in @("web-wallpaper", "thumbs")) {
+    $p = Join-Path $userDir $sub
+    if (Test-Path -LiteralPath $p) {
+        Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Кэш мода: превью, распакованные из архивов фоны и HTML-обои.
+$modCache = Join-Path $env:LOCALAPPDATA "YandexMusic-bg"
+if (Test-Path -LiteralPath $modCache) {
+    Remove-Item -LiteralPath $modCache -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 if (-not $NoLaunch) {
     Write-Host "Starting Yandex Music..."
     Start-Process -FilePath $exe
