@@ -81,8 +81,13 @@ ENGINE = r"""
       '{background:linear-gradient(180deg,rgba(8,8,8,.42),rgba(8,8,8,.6)) !important;}',
     'html.ym-page-open [class*="Content_main"]',
       '{background:transparent !important;background-image:none !important;visibility:hidden !important;}',
+    // Плеер выше панели «Фон»: backdrop-filter делает из плеера отдельный
+    // контекст наложения с z-index:auto, и вертикальный ползунок громкости
+    // (z-index 9999 внутри плеера) оказывался под панелью. Поднимаем сам
+    // контекст плеера на его штатный уровень --ym-z-index-player.
     '[class*="PlayerBarDesktopWithBackgroundProgressBar_root"]',
       '{background:rgba(14,14,14,' + (1 - cfg.playerTransparency).toFixed(2) + ') !important;' +
+      'z-index:var(--ym-z-index-player,300);' +
       '-webkit-backdrop-filter:blur(' + Math.round(cfg.playerBlur) + 'px) saturate(' + cfg.playerSaturate + ');' +
       'backdrop-filter:blur(' + Math.round(cfg.playerBlur) + 'px) saturate(' + cfg.playerSaturate + ');}',
     '[class*="SearchPage_skeletonHeaderWithUpperBlocks"]',
@@ -532,7 +537,7 @@ ENGINE = r"""
     '.ym-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 28px 4px;}',
     '.ym-page-title{margin:0;font-family:"YSMusic Headline","YS Text",sans-serif;font-size:32px;line-height:34px;font-weight:700;letter-spacing:-.2px;color:#e6e6e6;}',
     '.ym-page-sub{margin-top:7px;font-size:14px;line-height:20px;color:rgba(255,255,255,.5);}',
-    '.ym-page-body{flex:1;min-height:0;overflow:auto;padding:10px 28px 14px;}',
+    '.ym-page-body{flex:1;min-height:0;overflow:auto;padding:10px 28px 28px;overscroll-behavior:contain;}',
     '.ym-page-body::-webkit-scrollbar{width:8px;}',
     '.ym-page-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:4px;}',
     '.ym-grid{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr);gap:16px;}',
@@ -577,6 +582,32 @@ ENGINE = r"""
     '.ym-gal-name{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:18px 8px 6px;font-size:10.5px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.82));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none;}',
     '.ym-gal-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;color:rgba(255,255,255,.45);}',
     '.ym-gal-busy{opacity:.55;pointer-events:none;}',
+    // Контекстное меню плитки и окно свойств.
+    '.ym-ctx{position:fixed;z-index:400;min-width:190px;padding:6px;border-radius:12px;display:none;',
+      'background:rgba(22,24,28,.97);border:1px solid rgba(255,255,255,.1);',
+      'box-shadow:0 18px 50px rgba(0,0,0,.55);font-size:13px;color:#e6e6e6;}',
+    '.ym-ctx.on{display:block;}',
+    '.ym-ctx-item{padding:8px 10px;border-radius:8px;cursor:pointer;white-space:nowrap;}',
+    '.ym-ctx-item:hover{background:rgba(255,255,255,.08);}',
+    '.ym-ctx-item.ym-danger{color:#ff7a7a;}',
+    '.ym-ctx-item.ym-danger:hover{background:rgba(255,90,90,.16);}',
+    '.ym-ctx-sep{height:1px;margin:5px 8px;background:rgba(255,255,255,.08);}',
+    '.ym-props{position:fixed;z-index:401;inset:0;display:none;align-items:center;',
+      'justify-content:center;background:rgba(0,0,0,.55);}',
+    '.ym-props.on{display:flex;}',
+    '.ym-props-box{width:min(430px,92vw);max-height:80vh;overflow:auto;border-radius:16px;padding:18px 20px;',
+      'background:linear-gradient(180deg,rgba(26,28,33,.99),rgba(17,18,22,.99));',
+      'border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 90px rgba(0,0,0,.65);}',
+    '.ym-props-title{font-size:15px;font-weight:600;margin-bottom:12px;white-space:nowrap;',
+      'overflow:hidden;text-overflow:ellipsis;}',
+    '.ym-props-row{display:flex;justify-content:space-between;gap:16px;padding:6px 0;font-size:12.5px;',
+      'border-bottom:1px solid rgba(255,255,255,.06);}',
+    '.ym-props-row:last-child{border-bottom:0;}',
+    '.ym-props-k{color:rgba(255,255,255,.45);flex:0 0 auto;}',
+    '.ym-props-v{text-align:right;word-break:break-word;}',
+    '.ym-props-close{margin-top:14px;width:100%;padding:9px;border-radius:10px;border:1px solid rgba(255,255,255,.12);',
+      'background:rgba(255,255,255,.06);color:#e6e6e6;cursor:pointer;font-size:13px;}',
+    '.ym-props-close:hover{background:rgba(255,255,255,.12);}',
     '.ym-gal-count{color:rgba(255,255,255,.35);font-weight:400;font-size:13px;}',
     '.ym-sliders{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px 20px;margin-top:8px;}',
     '.ym-ctl{min-width:0;}',
@@ -689,8 +720,16 @@ ENGINE = r"""
     if(!main) return null;
     var r = main.getBoundingClientRect();
     if(!r.width || !r.height) return null;
+    // Нижняя граница — реальная верхняя кромка плеера, а не магическое число:
+    // иначе панель наезжает на ползунок громкости и кнопки плеера.
+    var bottom = window.innerHeight - 104;
+    var bar = document.querySelector('[class*="PlayerBarDesktop_root"], [class*="PlayerBar_root"], [class*="PlayerBarDesktopWithBackgroundProgressBar_root"]');
+    if(bar){
+      var br = bar.getBoundingClientRect();
+      if(br.height > 0 && br.top > r.top + 120) bottom = Math.round(br.top) - 6;
+    }
     var top = Math.round(r.top);
-    var bottom = Math.min(r.bottom, window.innerHeight - 104);
+    bottom = Math.min(bottom, window.innerHeight - 8);
     return {left: Math.round(r.left), top: top, width: Math.round(r.width), height: Math.max(200, Math.round(bottom - top))};
   }
 
@@ -1076,6 +1115,11 @@ ENGINE = r"""
       label.textContent = it.name;
       tile.appendChild(label);
       tile.addEventListener('click', function(){ useItem(it); });
+      tile.addEventListener('contextmenu', function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        openCtxMenu(ev.clientX, ev.clientY, it);
+      });
       if(media && it.kind === 'video'){
         if(galObserver) galObserver.observe(tile);
         else media.src = mediaUrl(it.name) + '#t=0.2';
@@ -1101,6 +1145,147 @@ ENGINE = r"""
       }catch(e){ galObserver = null; }
       for(var i = 0; i < items.length; i++) galEl.appendChild(makeTile(items[i]));
     }
+    // ---------- контекстное меню и свойства ----------
+    var ctxEl = null;
+    function ctxNode(tag, cls, text){
+      var el = document.createElement(tag);
+      if(cls) el.className = cls;
+      if(text !== undefined) el.textContent = text;
+      return el;
+    }
+    function closeCtxMenu(){
+      dropCtxListeners();
+      if(ctxEl && ctxEl.parentNode) ctxEl.parentNode.removeChild(ctxEl);
+      ctxEl = null;
+    }
+    function openCtxMenu(x, y, it){
+      closeCtxMenu();
+      var menu = ctxNode('div', 'ym-ctx on');
+      if(it.kind === 'archive' || it.kind === 'html'){
+        var openZip = ctxNode('div', 'ym-ctx-item', it.kind === 'html' ? 'Открыть файл' : 'Открыть архив');
+        openZip.addEventListener('click', function(){ closeCtxMenu(); openEntry(it, 'file'); });
+        menu.appendChild(openZip);
+      }
+      var showIn = ctxNode('div', 'ym-ctx-item', 'Показать в проводнике');
+      showIn.addEventListener('click', function(){ closeCtxMenu(); openEntry(it, 'folder'); });
+      menu.appendChild(showIn);
+      menu.appendChild(ctxNode('div', 'ym-ctx-sep'));
+      var props = ctxNode('div', 'ym-ctx-item', 'Свойства');
+      props.addEventListener('click', function(){ closeCtxMenu(); showProps(it); });
+      menu.appendChild(props);
+      menu.appendChild(ctxNode('div', 'ym-ctx-sep'));
+      var del = ctxNode('div', 'ym-ctx-item ym-danger', 'Удалить');
+      del.addEventListener('click', function(){ closeCtxMenu(); removeItem(it); });
+      menu.appendChild(del);
+      document.body.appendChild(menu);
+      var w = menu.offsetWidth || 190;
+      var h = menu.offsetHeight || 80;
+      menu.style.left = Math.max(8, Math.min(x, window.innerWidth - w - 8)) + 'px';
+      menu.style.top = Math.max(8, Math.min(y, window.innerHeight - h - 8)) + 'px';
+      ctxEl = menu;
+      setTimeout(function(){
+        window.addEventListener('mousedown', onCtxOutside, true);
+        window.addEventListener('keydown', onCtxEsc, true);
+      }, 0);
+    }
+    function onCtxOutside(ev){
+      if(ctxEl && ev.target && ctxEl.contains(ev.target)) return;
+      closeCtxMenu();
+    }
+    function onCtxEsc(ev){
+      if(ev.key === 'Escape') closeCtxMenu();
+    }
+    function dropCtxListeners(){
+      window.removeEventListener('mousedown', onCtxOutside, true);
+      window.removeEventListener('keydown', onCtxEsc, true);
+    }
+    function fmtTime(sec){
+      sec = Number(sec) || 0;
+      if(!sec) return '';
+      var m = Math.floor(sec / 60), s = Math.round(sec % 60);
+      if(s === 60){ m += 1; s = 0; }
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    function propRow(box, k, v){
+      if(v === undefined || v === null || v === '') return;
+      var row = ctxNode('div', 'ym-props-row');
+      row.appendChild(ctxNode('div', 'ym-props-k', k));
+      row.appendChild(ctxNode('div', 'ym-props-v', String(v)));
+      box.appendChild(row);
+    }
+    function showProps(it){
+      var box = ctxNode('div', 'ym-props on');
+      var card = ctxNode('div', 'ym-props-box');
+      card.appendChild(ctxNode('div', 'ym-props-title', it.name));
+      var body = ctxNode('div', 'ym-props-body', 'Загружаю…');
+      card.appendChild(body);
+      var close = ctxNode('button', 'ym-props-close', 'Закрыть');
+      close.addEventListener('click', function(){ if(box.parentNode) box.parentNode.removeChild(box); });
+      card.appendChild(close);
+      box.appendChild(card);
+      box.addEventListener('mousedown', function(ev){ if(ev.target === box) box.parentNode.removeChild(box); });
+      document.body.appendChild(box);
+
+      fetch('http://127.0.0.1:47823/info?t=' + encodeURIComponent(cfg.token || '') +
+            '&f=' + encodeURIComponent(it.name))
+        .then(function(r){ return r.json(); })
+        .then(function(r){
+          body.textContent = '';
+          if(!r || !r.ok){ body.textContent = 'Не удалось прочитать файл'; return; }
+          var kindName = r.kind === 'video' ? 'Видео' :
+                         r.kind === 'image' ? 'Картинка' :
+                         r.kind === 'archive' ? 'Архив обоев' : 'HTML-обои';
+          propRow(body, 'Тип', kindName);
+          propRow(body, 'Формат', (r.ext || '').replace('.', '').toUpperCase());
+          propRow(body, 'Размер', fmtSize(r.size));
+          if(r.width && r.height) propRow(body, 'Разрешение', r.width + ' × ' + r.height);
+          if(r.megapixels) propRow(body, 'Мегапиксели', r.megapixels.toFixed(1));
+          if(r.aspect) propRow(body, 'Соотношение', r.aspect);
+          if(r.fps) propRow(body, 'Кадры/с', r.fps.toFixed(2) + ' fps');
+          if(r.duration) propRow(body, 'Длительность', fmtTime(r.duration));
+          if(r.codec) propRow(body, 'Кодек', r.codec);
+          if(r.bitrate) propRow(body, 'Битрейт', (r.bitrate / 1000000).toFixed(2) + ' Мбит/с');
+          if(r.frames) propRow(body, 'Кадров', r.frames);
+          if(r.entries) propRow(body, 'Файлов в архиве', r.entries);
+          if(r.type) propRow(body, 'Тип сцены', r.type);
+          if(r.preview) propRow(body, 'Превью', r.preview);
+          if(r.texture) propRow(body, 'Текстура сцены', r.texture);
+          if(r.mtime) propRow(body, 'Изменён', new Date(r.mtime).toLocaleString());
+          propRow(body, 'Папка', r.dir === 'archives' ? 'Архивы' : 'Фоны');
+          propRow(body, 'Файл', r.name);
+        })
+        .catch(function(){ body.textContent = 'Музыка не отвечает'; });
+    }
+    function openEntry(it, mode){
+      fetch('http://127.0.0.1:47823/open', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        body: JSON.stringify({f: it.name, mode: mode === 'folder' ? 'folder' : 'file'})
+      })
+        .then(function(r){ return r.json(); })
+        .then(function(r){
+          if(!r || !r.ok) status('Не удалось открыть: ' + ((r && r.error) || 'неизвестно'), true);
+        })
+        .catch(function(){ status('Музыка не отвечает', true); });
+    }
+
+    function removeItem(it){
+      if(!confirm('Удалить «' + it.name + '»?')) return;
+      status('Удаляю: ' + it.name + '…');
+      fetch('http://127.0.0.1:47823/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        body: JSON.stringify({f: it.name})
+      })
+        .then(function(r){ return r.json(); })
+        .then(function(r){
+          if(!r || !r.ok){ status('Ошибка: ' + ((r && r.error) || 'неизвестно'), true); return; }
+          status('Удалено: ' + it.name);
+          loadLibrary();
+        })
+        .catch(function(){ status('Музыка не отвечает', true); });
+    }
+
     function loadLibrary(notify){
       var seq = ++galSeq;
       galEl.classList.add('ym-gal-busy');
@@ -1843,6 +2028,179 @@ function __ymBgStartServer(){
       return target;
     }catch(e){ return ''; }
   }
+  // ---------- метаданные для окна «Свойства» ----------
+  function imageSize(buf){
+    try{
+      if(buf.length > 24 && buf[0] === 0x89 && buf[1] === 0x50){
+        return {w: buf.readUInt32BE(16), h: buf.readUInt32BE(20)};
+      }
+      if(buf.length > 10 && buf.toString('ascii', 0, 3) === 'GIF'){
+        return {w: buf.readUInt16LE(6), h: buf.readUInt16LE(8)};
+      }
+      if(buf.length > 26 && buf[0] === 0x42 && buf[1] === 0x4d){
+        return {w: Math.abs(buf.readInt32LE(18)), h: Math.abs(buf.readInt32LE(22))};
+      }
+      if(buf.length > 30 && buf.toString('ascii', 0, 4) === 'RIFF' &&
+         buf.toString('ascii', 8, 12) === 'WEBP'){
+        const kind = buf.toString('ascii', 12, 16);
+        if(kind === 'VP8X'){
+          const w = 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16));
+          const h = 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16));
+          return {w: w, h: h};
+        }
+        if(kind === 'VP8 '){
+          return {w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff};
+        }
+        if(kind === 'VP8L'){
+          const b = buf.readUInt32LE(21);
+          return {w: (b & 0x3fff) + 1, h: ((b >> 14) & 0x3fff) + 1};
+        }
+      }
+      if(buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8){
+        let p = 2;
+        while(p + 9 < buf.length){
+          if(buf[p] !== 0xff){ p++; continue; }
+          const m = buf[p + 1];
+          if(m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)){ p += 2; continue; }
+          const len = buf.readUInt16BE(p + 2);
+          if(m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc){
+            return {w: buf.readUInt16BE(p + 7), h: buf.readUInt16BE(p + 5)};
+          }
+          p += 2 + len;
+        }
+      }
+    }catch(e){}
+    return null;
+  }
+
+  function mp4Boxes(buf, start, end){
+    const out = [];
+    let p = start;
+    while(p + 8 <= end){
+      let size = buf.readUInt32BE(p);
+      const type = buf.toString('ascii', p + 4, p + 8);
+      let head = 8;
+      if(size === 1){
+        if(p + 16 > end) break;
+        size = Number(buf.readBigUInt64BE(p + 8));
+        head = 16;
+      } else if(size === 0){
+        size = end - p;
+      }
+      if(size < head || p + size > end) break;
+      out.push({type: type, start: p + head, end: p + size});
+      p += size;
+    }
+    return out;
+  }
+
+  function mp4Meta(buf){
+    if(buf.length < 32 || buf.toString('ascii', 4, 8) !== 'ftyp') return null;
+    const top = mp4Boxes(buf, 0, buf.length);
+    const moov = top.filter(function(b){ return b.type === 'moov'; })[0];
+    if(!moov) return null;
+    const kids = mp4Boxes(buf, moov.start, moov.end);
+    const meta = {};
+    const mvhd = kids.filter(function(b){ return b.type === 'mvhd'; })[0];
+    if(mvhd){
+      const v = buf[mvhd.start];
+      if(v === 1){
+        meta.timescale = buf.readUInt32BE(mvhd.start + 20);
+        meta.duration = Number(buf.readBigUInt64BE(mvhd.start + 24)) / (meta.timescale || 1);
+      } else {
+        meta.timescale = buf.readUInt32BE(mvhd.start + 12);
+        meta.duration = buf.readUInt32BE(mvhd.start + 16) / (meta.timescale || 1);
+      }
+    }
+    const traks = kids.filter(function(b){ return b.type === 'trak'; });
+    for(let i = 0; i < traks.length; i++){
+      const tk = mp4Boxes(buf, traks[i].start, traks[i].end);
+      const tkhd = tk.filter(function(b){ return b.type === 'tkhd'; })[0];
+      const mdia = tk.filter(function(b){ return b.type === 'mdia'; })[0];
+      if(!tkhd || !mdia) continue;
+      const md = mp4Boxes(buf, mdia.start, mdia.end);
+      const hdlr = md.filter(function(b){ return b.type === 'hdlr'; })[0];
+      const isVideo = hdlr && buf.toString('ascii', hdlr.start + 8, hdlr.start + 12) === 'vide';
+      if(!isVideo) continue;
+      const tv = buf[tkhd.start];
+      const wOff = tv === 1 ? tkhd.start + 88 : tkhd.start + 76;
+      if(wOff + 8 <= tkhd.end){
+        meta.width = Math.round(buf.readUInt32BE(wOff) / 65536);
+        meta.height = Math.round(buf.readUInt32BE(wOff + 4) / 65536);
+      }
+      const minf = md.filter(function(b){ return b.type === 'minf'; })[0];
+      const stbl = minf ? mp4Boxes(buf, minf.start, minf.end).filter(function(b){ return b.type === 'stbl'; })[0] : null;
+      if(stbl){
+        const sb = mp4Boxes(buf, stbl.start, stbl.end);
+        const stsz = sb.filter(function(b){ return b.type === 'stsz'; })[0];
+        const stsd = sb.filter(function(b){ return b.type === 'stsd'; })[0];
+        if(stsz) meta.frames = buf.readUInt32BE(stsz.start + 8);
+        if(stsd && stsd.start + 20 <= stsd.end){
+          meta.codec = buf.toString('ascii', stsd.start + 12, stsd.start + 16);
+        }
+      }
+      break;
+    }
+    if(meta.duration && meta.frames){
+      meta.fps = meta.frames / meta.duration;
+      meta.bitrate = (buf.length * 8) / meta.duration;
+    }
+    return meta;
+  }
+
+  function webmMeta(buf){
+    if(!(buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3)) return null;
+    const out = {};
+    function readVint(p){
+      const b = buf[p];
+      if(!b) return null;
+      let len = 1, mask = 0x80;
+      while(len <= 8 && !(b & mask)){ len++; mask >>= 1; }
+      if(len > 8) return null;
+      let v = b & (mask - 1);
+      for(let i = 1; i < len; i++) v = v * 256 + buf[p + i];
+      return {v: v, len: len};
+    }
+    function readUInt(p, n){
+      let v = 0;
+      for(let i = 0; i < n; i++) v = v * 256 + buf[p + i];
+      return v;
+    }
+    function findTag(a, b, c){
+      for(let i = 0; i < buf.length - 3; i++){
+        if(buf[i] === a && buf[i + 1] === b && buf[i + 2] === c) return i + 3;
+      }
+      return -1;
+    }
+    const pairs = [[[0x42, 0x82, 0x40], 'width'], [[0x42, 0xba, 0x40], 'height']];
+    for(let i = 0; i < pairs.length; i++){
+      const at = findTag(pairs[i][0][0], pairs[i][0][1], pairs[i][0][2]);
+      if(at < 0) continue;
+      const size = readVint(at);
+      if(!size || size.v <= 0 || size.v > 4) continue;
+      out[pairs[i][1]] = readUInt(at + size.len, size.v);
+    }
+    return (out.width && out.height) ? out : null;
+  }
+
+  function zipMeta(full, buf){
+    const z = readZip(buf);
+    const out = {entries: z.filter(function(e){ return !e.dir; }).length};
+    let pj = null;
+    for(let i = 0; i < z.length; i++){
+      if(!z[i].dir && /(^|\/)project\.json$/i.test(z[i].name)){ pj = z[i]; break; }
+    }
+    if(pj){
+      try{
+        const j = JSON.parse(zipEntry(buf, pj).toString('utf8')) || {};
+        if(j.type) out.type = String(j.type);
+        if(j.preview) out.preview = String(j.preview);
+        if(j.title) out.title = String(j.title);
+      }catch(e){}
+    }
+    return out;
+  }
+
   function libraryItems(){
     const cfg = readCfg();
     const activeFile = cfg.file ? path.basename(String(cfg.file)) : '';
@@ -2214,6 +2572,200 @@ function __ymBgStartServer(){
     }
     return entry;
   }
+  // ---------- Wallpaper Engine: scene.pkg ----------
+  // Сцена WE — это .pkg с текстурами и шейдерами. Сам движок не воспроизвести,
+  // но исходные текстуры внутри лежат как есть: вытаскиваем самую большую
+  // картинку сцены, а не превью из архива.
+  function pkgEntries(buf){
+    if(buf.length < 12) return [];
+    const magicLen = buf.readUInt32LE(0);
+    if(magicLen < 4 || magicLen > 32) return [];
+    const magic = buf.toString('ascii', 4, 4 + magicLen);
+    if(magic.indexOf('PKGV') !== 0) return [];
+    let p = 4 + magicLen;
+    const count = buf.readUInt32LE(p); p += 4;
+    if(!count || count > 100000) return [];
+    const list = [];
+    for(let i = 0; i < count && p + 8 <= buf.length; i++){
+      const n = buf.readUInt32LE(p); p += 4;
+      if(p + n > buf.length) break;
+      const name = buf.toString('utf8', p, p + n); p += n;
+      const off = buf.readUInt32LE(p); p += 4;
+      const size = buf.readUInt32LE(p); p += 4;
+      list.push({name: name, off: off, size: size});
+    }
+    const headerEnd = p;
+    for(let i = 0; i < list.length; i++){
+      const e = list[i];
+      const start = headerEnd + e.off;
+      if(start < 0 || start + e.size > buf.length) continue;
+      e.data = buf.subarray(start, start + e.size);
+    }
+    return list.filter(function(e){ return e.data; });
+  }
+
+  const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const PNG_END = Buffer.from([0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
+
+  function pngFromTex(tex){
+    const at = tex.indexOf(PNG_SIG);
+    if(at < 0) return null;
+    const end = tex.indexOf(PNG_END, at);
+    if(end < 0) return null;
+    const png = tex.subarray(at, end + 8);
+    if(png.length < 57 || png.length > 64 * 1024 * 1024) return null;
+    let w = 0, h = 0;
+    try{ w = png.readUInt32BE(16); h = png.readUInt32BE(20); }catch(e){ return null; }
+    if(!w || !h || w > 8192 || h > 8192) return null;
+    return {buf: png, width: w, height: h};
+  }
+
+  // Старые архивы хранят текстуры сжатыми (DXT1/DXT5/RGBA). Декодируем вручную,
+  // без внешних зависимостей: zlib уже под рукой, PNG собираем сами.
+  function crc32(buf){
+    if(!crc32.table){
+      const t = new Int32Array(256);
+      for(let n = 0; n < 256; n++){
+        let c = n;
+        for(let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c;
+      }
+      crc32.table = t;
+    }
+    const t = crc32.table;
+    let c = -1;
+    for(let i = 0; i < buf.length; i++) c = t[(c ^ buf[i]) & 255] ^ (c >>> 8);
+    return (c ^ -1) >>> 0;
+  }
+  function pngChunk(type, data){
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  }
+  function encodePng(rgba, w, h){
+    const stride = w * 4 + 1;
+    const raw = Buffer.alloc(stride * h);
+    for(let y = 0; y < h; y++){
+      raw[y * stride] = 0;
+      rgba.copy(raw, y * stride + 1, y * w * 4, (y + 1) * w * 4);
+    }
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+    ihdr[8] = 8; ihdr[9] = 6;
+    return Buffer.concat([PNG_SIG, pngChunk('IHDR', ihdr),
+      pngChunk('IDAT', zlib.deflateSync(raw, {level: 9})), pngChunk('IEND', Buffer.alloc(0))]);
+  }
+  function rgb565(v){
+    return [Math.round(((v >> 11) & 31) * 255 / 31),
+            Math.round(((v >> 5) & 63) * 255 / 63),
+            Math.round((v & 31) * 255 / 31)];
+  }
+  function mixCol(a, b, wa, wb){
+    const t = wa + wb;
+    return [Math.round((a[0] * wa + b[0] * wb) / t),
+            Math.round((a[1] * wa + b[1] * wb) / t),
+            Math.round((a[2] * wa + b[2] * wb) / t)];
+  }
+  function decodeDxt(src, w, h, out, alpha){
+    const bw = Math.max(1, Math.ceil(w / 4)), bh = Math.max(1, Math.ceil(h / 4));
+    let s = 0;
+    for(let by = 0; by < bh; by++){
+      for(let bx = 0; bx < bw; bx++){
+        let alphas = null;
+        if(alpha){
+          const a0 = src[s], a1 = src[s + 1];
+          const ab = [src[s+2], src[s+3], src[s+4], src[s+5], src[s+6], src[s+7]];
+          alphas = [a0, a1];
+          if(a0 > a1){
+            for(let i = 1; i <= 6; i++) alphas.push(Math.round(((7 - i) * a0 + i * a1) / 7));
+          } else {
+            for(let i = 1; i <= 4; i++) alphas.push(Math.round(((5 - i) * a0 + i * a1) / 5));
+            alphas.push(0, 255);
+          }
+          s += 8;
+          var abits = ab;
+        }
+        const c0 = src.readUInt16LE(s), c1 = src.readUInt16LE(s + 2);
+        const bits = src.readUInt32LE(s + 4);
+        s += 8;
+        const col = [rgb565(c0), rgb565(c1)];
+        if(c0 > c1){
+          col.push(mixCol(col[0], col[1], 1, 2), mixCol(col[0], col[1], 2, 1));
+        } else {
+          col.push(mixCol(col[0], col[1], 1, 1), [0, 0, 0]);
+        }
+        for(let py = 0; py < 4; py++){
+          for(let px = 0; px < 4; px++){
+            const bi = py * 4 + px;
+            const x = bx * 4 + px, y = by * 4 + py;
+            if(x >= w || y >= h) continue;
+            const c = col[(bits >>> (2 * bi)) & 3];
+            let a = 255;
+            if(alphas){
+              const bit = bi * 3;
+              const ai = ((abits[bit >> 3] >> (bit & 7)) |
+                          (abits[(bit >> 3) + 1] << (8 - (bit & 7)))) & 7;
+              a = alphas[ai] === undefined ? 255 : alphas[ai];
+            }
+            const o = (y * w + x) * 4;
+            out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = a;
+          }
+        }
+      }
+    }
+    return out;
+  }
+  function texToPng(tex){
+    if(tex.length < 40) return null;
+    if(tex.toString('ascii', 0, 8) !== 'TEXV0005') return null;
+    let p = 16;
+    const format = tex.readUInt32LE(p); p += 4;
+    p += 4;
+    let w = tex.readUInt32LE(p); p += 4;
+    let h = tex.readUInt32LE(p); p += 4;
+    p += 8;
+    // Ищем блок данных: у разных версий разное число служебных полей.
+    let at = tex.indexOf('TEXB', 24);
+    if(at < 0) return null;
+    const version = tex.toString('ascii', at, at + 8);
+    let q = at + 8;
+    if(version === 'TEXB0002' || version === 'TEXB0003') q += 4;
+    q += 4; // число изображений
+    const mips = tex.readUInt32LE(q); q += 4;
+    if(!mips) return null;
+    if(version === 'TEXB0003'){
+      w = tex.readUInt32LE(q); q += 4;
+      h = tex.readUInt32LE(q); q += 4;
+    }
+    const bytes = tex.readUInt32LE(q); q += 4;
+    if(!w || !h || w > 8192 || h > 8192 || !bytes || q + bytes > tex.length) return null;
+    const data = tex.subarray(q, q + bytes);
+    const out = Buffer.alloc(w * h * 4, 255);
+    if(format === 4 || format === 7) decodeDxt(data, w, h, out, true);
+    else if(format === 5 || format === 3) decodeDxt(data, w, h, out, false);
+    else if(format === 0){
+      const n = Math.min(w * h * 4, data.length);
+      for(let i = 0; i < n; i++) out[i] = data[i];
+    } else return null;
+    return {buf: encodePng(out, w, h), width: w, height: h};
+  }
+
+  function imageFromPkg(pkgBuf){
+    const entries = pkgEntries(pkgBuf);
+    if(!entries.length) return null;
+    let best = null;
+    for(let i = 0; i < entries.length; i++){
+      const e = entries[i];
+      if(!/\.tex$/i.test(e.name)) continue;
+      let img = null;
+      try{ img = pngFromTex(e.data) || texToPng(e.data); }catch(err){ img = null; }
+      if(!img) continue;
+      if(!best || img.width * img.height > best.width * best.height) best = img;
+    }
+    return best;
+  }
+
   function installWebFile(srcPath){
     resetWebDir();
     fs.copyFileSync(srcPath, path.join(WEB_DIR, 'index.html'));
@@ -2259,6 +2811,20 @@ function __ymBgStartServer(){
       }
     }
 
+    // Сцена Wallpaper Engine: берём исходную текстуру из scene.pkg, а не превью.
+    const pkgs = z.filter(function(e){ return !e.dir && /\.pkg$/i.test(e.name); });
+    for(let pi = 0; pi < pkgs.length; pi++){
+      let img = null;
+      try{
+        img = imageFromPkg(zipEntry(buf, pkgs[pi]));
+      }catch(e){ img = null; }
+      if(img){
+        const w = writeMedia(img.buf, '.png', 'custom-background-' + zipKey + '.png', MEDIA_DIR);
+        return {kind: 'media', file: w.name, bytes: w.bytes,
+          note: 'Wallpaper Engine: исходная текстура сцены ' + img.width + '×' + img.height};
+      }
+    }
+
     // scene/application (или видео не нашлось): без Wallpaper Engine сцену не проиграть,
     // поэтому берём анимированное превью из архива, если оно есть.
     let pv = findEntry(z, prefix + 'preview.gif') || findEntry(z, 'preview.gif');
@@ -2274,7 +2840,19 @@ function __ymBgStartServer(){
         note: 'Wallpaper Engine: сцену без движка не проиграть — поставил ' +
               (ext === '.gif' ? 'анимированное превью (GIF)' : 'превью картинкой')};
     }
-    throw new Error('в архиве нет ни видео, ни HTML-обоев, ни превью');
+    // Последний шанс: любая картинка внутри архива.
+    const anyPic = pickLargest(z, ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.bmp']);
+    if(anyPic){
+      const data = zipEntry(buf, anyPic);
+      let ext = path.extname(anyPic.name).toLowerCase();
+      if(ext === '.jpeg') ext = '.jpg';
+      const sniff = sniffExt(data);
+      if(sniff && ALLOWED_EXT.indexOf(sniff) !== -1) ext = sniff;
+      const w = writeMedia(data, ext, 'custom-background-' + zipKey + ext, MEDIA_DIR);
+      return {kind: 'media', file: w.name, bytes: w.bytes,
+        note: 'Из архива взята картинка ' + anyPic.name.split('/').pop()};
+    }
+    throw new Error('в архиве нет ни видео, ни картинок, ни HTML-обоев');
   }
 
   // ---------- ссылка / HTML-код обоев ----------
@@ -2749,6 +3327,149 @@ function __ymBgStartServer(){
       if(!thumb) return reply(res, 404, {ok: false, error: 'no preview'});
       return serveFile(req, res, thumb, thumb);
     }
+    if(req.method === 'GET' && u === '/info'){
+      if(!tokenEquals(queryToken(req), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const name = path.basename(String(queryParam(req, 'f') || ''));
+      const inWall = safeFileIn(WALL_DIR, name, LIB_EXT);
+      const inArch = inWall ? '' : safeFileIn(ARCHIVE_DIR, name, ['.zip', '.html', '.htm']);
+      const full = inWall || inArch;
+      if(!full) return reply(res, 404, {ok: false, error: 'файл не найден'});
+      let st;
+      try{ st = fs.statSync(full); }catch(e){ return reply(res, 404, {ok: false, error: 'файл не найден'}); }
+      const ext = path.extname(name).toLowerCase();
+      const out = {
+        ok: true,
+        name: name,
+        ext: ext,
+        size: st.size,
+        mtime: Math.round(st.mtimeMs || 0),
+        dir: inWall ? 'wallpapers' : 'archives',
+        kind: VIDEO_EXT.indexOf(ext) !== -1 ? 'video' :
+              IMAGE_EXT.indexOf(ext) !== -1 ? 'image' :
+              (ext === '.zip' ? 'archive' : 'html')
+      };
+      try{
+        if(out.kind === 'image' || ext === '.gif'){
+          const head = fs.readFileSync(full);
+          const dim = imageSize(head);
+          if(dim && dim.w && dim.h){
+            out.width = dim.w; out.height = dim.h;
+            out.megapixels = (dim.w * dim.h) / 1000000;
+            const r = dim.w / dim.h;
+            out.aspect = Math.abs(r - 16 / 9) < 0.02 ? '16:9' :
+                         Math.abs(r - 9 / 16) < 0.02 ? '9:16' :
+                         Math.abs(r - 21 / 9) < 0.02 ? '21:9' :
+                         Math.abs(r - 4 / 3) < 0.02 ? '4:3' :
+                         Math.abs(r - 1) < 0.02 ? '1:1' : (dim.w + ':' + dim.h);
+          }
+        } else if(out.kind === 'video'){
+          if(st.size <= 512 * 1024 * 1024){
+            const buf = fs.readFileSync(full);
+            const meta = mp4Meta(buf) || webmMeta(buf) || {};
+            if(meta.width) out.width = meta.width;
+            if(meta.height) out.height = meta.height;
+            if(out.width && out.height) out.megapixels = (out.width * out.height) / 1000000;
+            if(meta.duration) out.duration = meta.duration;
+            if(meta.fps && isFinite(meta.fps)) out.fps = meta.fps;
+            if(meta.frames) out.frames = meta.frames;
+            if(meta.codec) out.codec = meta.codec;
+            if(meta.bitrate && isFinite(meta.bitrate)) out.bitrate = meta.bitrate;
+          }
+        } else if(ext === '.zip'){
+          if(st.size <= 512 * 1024 * 1024){
+            const buf = fs.readFileSync(full);
+            const zm = zipMeta(full, buf);
+            if(zm.entries) out.entries = zm.entries;
+            if(zm.type) out.type = zm.type;
+            if(zm.preview) out.preview = zm.preview;
+            try{
+              const z = readZip(buf);
+              const pkgEntry = z.filter(function(e){ return !e.dir && /\.pkg$/i.test(e.name); })[0];
+              if(pkgEntry){
+                const img = imageFromPkg(zipEntry(buf, pkgEntry));
+                if(img) out.texture = img.width + ' × ' + img.height;
+              }
+            }catch(e){}
+          }
+        }
+      }catch(e){}
+      return reply(res, 200, out);
+    }
+
+    if(req.method === 'POST' && u === '/open'){
+      if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const ct = String(req.headers['content-type'] || '').toLowerCase();
+      if(ct.indexOf('application/json') !== 0) return reply(res, 415, {ok: false, error: 'нужен application/json'});
+      let body;
+      try{ body = await readJsonBody(req, 64 * 1024); }
+      catch(e){ return reply(res, 400, {ok: false, error: String((e && e.message) || e)}); }
+      const name = path.basename(String((body && body.f) || ''));
+      const wantFolder = String((body && body.mode) || 'file') === 'folder';
+      const inWall = safeFileIn(WALL_DIR, name, LIB_EXT);
+      const inArch = inWall ? '' : safeFileIn(ARCHIVE_DIR, name, ['.zip', '.html', '.htm']);
+      const full = inWall || inArch;
+      if(!full) return reply(res, 404, {ok: false, error: 'файл не найден'});
+      let err = '';
+      try{
+        const electron = require('electron');
+        const shell = electron && electron.shell;
+        if(wantFolder){
+          // showItemInFolder — штатный способ Electron: открывает проводник
+          // и выделяет файл, без возни с аргументами explorer.exe.
+          if(shell && typeof shell.showItemInFolder === 'function'){
+            shell.showItemInFolder(full);
+          } else {
+            const { spawn } = require('node:child_process');
+            const child = spawn('explorer.exe', ['/select,"' + full + '"'], {detached: true, stdio: 'ignore'});
+            child.on('error', function(){});
+            child.unref();
+          }
+        } else {
+          if(shell && typeof shell.openPath === 'function'){
+            err = String(await shell.openPath(full) || '');
+          }
+          if(err){
+            const { spawn } = require('node:child_process');
+            const child = spawn('cmd.exe', ['/c', 'start', '', full], {detached: true, stdio: 'ignore', windowsHide: true});
+            child.on('error', function(){});
+            child.unref();
+            err = '';
+          }
+        }
+      }catch(e){ err = String((e && e.message) || e); }
+      if(err) return reply(res, 500, {ok: false, error: err});
+      return reply(res, 200, {ok: true});
+    }
+
+    if(req.method === 'POST' && u === '/remove'){
+      if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const ct = String(req.headers['content-type'] || '').toLowerCase();
+      if(ct.indexOf('application/json') !== 0) return reply(res, 415, {ok: false, error: 'нужен application/json'});
+      let body;
+      try{ body = await readJsonBody(req, 256 * 1024); }
+      catch(e){ return reply(res, 400, {ok: false, error: String((e && e.message) || e)}); }
+      const name = path.basename(String((body && body.f) || ''));
+      const inWall = safeFileIn(WALL_DIR, name, LIB_EXT);
+      const inArch = inWall ? '' : safeFileIn(ARCHIVE_DIR, name, ['.zip', '.html', '.htm']);
+      const full = inWall || inArch;
+      if(!full) return reply(res, 404, {ok: false, error: 'файл не найден'});
+      try{ fs.unlinkSync(full); }
+      catch(e){ return reply(res, 500, {ok: false, error: 'не удалось удалить: файл занят'}); }
+      const cfg = readCfg();
+      let changed = false;
+      if(path.basename(String(cfg.file || '')) === name){ cfg.file = ''; changed = true; }
+      if(path.basename(String(cfg.lib || '')) === name){
+        cfg.lib = '';
+        if(cfg.file === name) cfg.file = '';
+        changed = true;
+      }
+      if(changed){
+        try{ writeCfg(cfg); }catch(e){}
+        try{ __ymBgBroadcast(__ymBgReadPayload()); }catch(e){}
+      }
+      return reply(res, 200, {ok: true, removed: name});
+    }
+
     if(req.method === 'GET' && u === '/media'){
       if(!tokenEquals(queryToken(req), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
       const want = queryParam(req, 'f');

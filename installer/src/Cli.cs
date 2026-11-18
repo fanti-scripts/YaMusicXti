@@ -37,6 +37,8 @@ namespace YMBG
             bool restore = false;
             bool status = false;
             bool launch = false;
+            bool checkUpdate = false;
+            bool doUpdate = false;
             string appDir = null;
             StreamWriter fileLog = null;
 
@@ -60,6 +62,12 @@ namespace YMBG
                             break;
                         case "--launch":
                             launch = true;
+                            break;
+                        case "--check-update":
+                            checkUpdate = true;
+                            break;
+                        case "--update":
+                            doUpdate = true;
                             break;
                         case "--appdir":
                             if (i + 1 < args.Length)
@@ -110,6 +118,10 @@ namespace YMBG
                     }
                 };
 
+                if (checkUpdate || doUpdate)
+                {
+                    return RunUpdate(doUpdate, log);
+                }
                 if (status)
                 {
                     return PrintStatus(appDir, log);
@@ -161,6 +173,31 @@ namespace YMBG
             }
         }
 
+        private static int RunUpdate(bool download, Action<string> log)
+        {
+            log("Установщик: " + Core.InstallerVersion);
+            UpdateInfo info = Updater.Check();
+            if (info.Error != null)
+            {
+                log("Обновления: " + info.Error);
+                return 1;
+            }
+            log("На GitHub: " + (string.IsNullOrEmpty(info.Version) ? "версия неизвестна" : info.Version));
+            if (!info.Available)
+            {
+                log("Обновление не нужно.");
+                return 0;
+            }
+            log("Доступно обновление " + info.Version + ".");
+            if (!download)
+            {
+                return 0;
+            }
+            string path = Updater.Download(info, log);
+            Updater.Apply(path, log);
+            return 0;
+        }
+
         private static int PrintStatus(string appDir, Action<string> log)
         {
             AppState state = Core.GetState(appDir);
@@ -196,6 +233,8 @@ namespace YMBG
                 "  --apply            установить патч\r\n" +
                 "  --restore          вернуть оригинальные файлы\r\n" +
                 "  --status           показать состояние\r\n" +
+                "  --check-update     проверить обновления установщика\r\n" +
+                "  --update           скачать и установить обновление\r\n" +
                 "  --launch           запустить Музыку после операции\r\n" +
                 "  --appdir <путь>    указать папку клиента вручную\r\n" +
                 "  --out <файл>       писать журнал в файл\r\n" +

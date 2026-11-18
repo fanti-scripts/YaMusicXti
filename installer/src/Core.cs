@@ -25,7 +25,7 @@ namespace YMBG
     /// <summary>Вся работа установщика: поиск клиента,apply/restore, файлы пользователя.</summary>
     internal static class Core
     {
-        public const string InstallerVersion = "2.1.0";
+        public const string InstallerVersion = "2.2.0";
         public const string AppName = "Яндекс Музыка";
 
         public static string UserDir

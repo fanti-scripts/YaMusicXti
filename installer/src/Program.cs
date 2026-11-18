@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -6,8 +8,8 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyDescription("Установщик мода «Фон Яндекс Музыки»")]
 [assembly: System.Reflection.AssemblyProduct("Фон Яндекс Музыки")]
 [assembly: System.Reflection.AssemblyCopyright("Неофициальный мод")]
-[assembly: System.Reflection.AssemblyVersion("2.0.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("2.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("2.2.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("2.2.0.0")]
 [assembly: System.Runtime.InteropServices.ComVisible(false)]
 
 namespace YMBG
@@ -17,9 +19,48 @@ namespace YMBG
         [STAThread]
         private static int Main(string[] args)
         {
-            if (args != null && args.Length > 0)
+            // Служебные аргументы самообновления: новый exe ждёт, пока старый
+            // процесс отпустит мьютекс, и только потом открывает окно.
+            int waitPid = 0;
+            List<string> rest = new List<string>();
+            if (args != null)
             {
-                return Cli.Run(args);
+                for (int i = 0; i < args.Length; i++)
+                {
+                    string arg = args[i];
+                    if (string.Equals(arg, "--updated", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    if (string.Equals(arg, "--wait-pid", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (i + 1 < args.Length)
+                        {
+                            int.TryParse(args[++i], out waitPid);
+                        }
+                        continue;
+                    }
+                    rest.Add(arg);
+                }
+            }
+            if (waitPid > 0)
+            {
+                try
+                {
+                    using (Process old = Process.GetProcessById(waitPid))
+                    {
+                        old.WaitForExit(20000);
+                    }
+                }
+                catch
+                {
+                }
+            }
+            Updater.CleanupOld();
+
+            if (rest.Count > 0)
+            {
+                return Cli.Run(rest.ToArray());
             }
 
             Application.EnableVisualStyles();

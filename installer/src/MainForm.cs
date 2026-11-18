@@ -23,6 +23,7 @@ namespace YMBG
         private readonly string startDirHint;
         private AppState state;
         private bool busy;
+        private bool updateStarted;
 
         private IconTile logo;
         private IconTile heroIcon;
@@ -72,6 +73,7 @@ namespace YMBG
             base.OnLoad(e);
             AppendLog("Установщик готов.");
             RefreshState();
+            CheckForUpdates();
         }
 
         protected override void OnResize(EventArgs e)
@@ -662,6 +664,126 @@ namespace YMBG
             busy = false;
             progress.Active = false;
             RefreshState();
+        }
+
+        /// <summary>
+        /// Тихо проверяет GitHub Releases. Если вышла новая версия — сама
+        /// скачивает её и предлагает перезапуститься. Ручная загрузка не нужна.
+        /// </summary>
+        private void CheckForUpdates()
+        {
+            if (updateStarted)
+            {
+                return;
+            }
+            updateStarted = true;
+
+            Task<UpdateInfo> task = Task.Factory.StartNew<UpdateInfo>(delegate
+            {
+                return Updater.Check();
+            });
+            task.ContinueWith(delegate(Task<UpdateInfo> t)
+            {
+                if (t.IsFaulted)
+                {
+                    Exception ex = t.Exception == null ? null : t.Exception.GetBaseException();
+                    Post(delegate
+                    {
+                        AppendLog("Обновления: " + (ex == null ? "неизвестная ошибка" : ex.Message));
+                    });
+                    return;
+                }
+                UpdateInfo info = t.Result;
+                Post(delegate { OnUpdateChecked(info); });
+            });
+        }
+
+        private void OnUpdateChecked(UpdateInfo info)
+        {
+            if (info == null)
+            {
+                return;
+            }
+            if (info.Error != null)
+            {
+                AppendLog("Обновления: " + info.Error);
+                return;
+            }
+            if (!info.Available)
+            {
+                AppendLog("Установщик " + Core.InstallerVersion + " — последняя версия.");
+                return;
+            }
+
+            AppendLog("Доступно обновление " + info.Version + ".");
+            SetHero("↑", Ui.Accent, "Есть обновление " + info.Version,
+                "Скачиваю новую версию установщика — вручную ничего качать не нужно.");
+            DownloadUpdate(info);
+        }
+
+        private void DownloadUpdate(UpdateInfo info)
+        {
+            Task<string> task = Task.Factory.StartNew<string>(delegate
+            {
+                return Updater.Download(info, delegate(string message)
+                {
+                    Post(delegate { AppendLog(message); });
+                });
+            });
+            task.ContinueWith(delegate(Task<string> t)
+            {
+                Post(delegate { OnUpdateDownloaded(info, t); });
+            });
+        }
+
+        private void OnUpdateDownloaded(UpdateInfo info, Task<string> task)
+        {
+            if (task.IsFaulted)
+            {
+                Exception ex = task.Exception == null ? null : task.Exception.GetBaseException();
+                AppendLog("Обновление не скачалось: " + (ex == null ? "неизвестная ошибка" : ex.Message));
+                RefreshState();
+                return;
+            }
+
+            SetHero("↑", Ui.Accent, "Обновление " + info.Version + " готово",
+                "Перезапущу установщик, чтобы применить новую версию.");
+            AppendLog("Обновление " + info.Version + " скачано.");
+
+            if (busy)
+            {
+                AppendLog("Завершите текущую операцию и запустите установщик снова — обновление применится тогда.");
+                return;
+            }
+
+            DialogResult answer = MessageBox.Show(this,
+                "Вышла версия " + info.Version + ".\n\n" +
+                "Перезапустить установщик и обновить его сейчас?\n" +
+                "Настройки и фоны останутся на месте.",
+                "Обновление установщика", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (answer != DialogResult.Yes)
+            {
+                AppendLog("Обновление отложено. Файл сохранён, при следующем запуске качать заново не придётся.");
+                RefreshState();
+                return;
+            }
+
+            try
+            {
+                SetBusy(true);
+                Updater.Apply(task.Result, AppendLog);
+            }
+            catch (Exception ex)
+            {
+                busy = false;
+                progress.Active = false;
+                AppendLog("Не удалось обновить установщик: " + ex.Message);
+                MessageBox.Show(this, ex.Message, "Обновление", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                RefreshState();
+                return;
+            }
+            // Новый процесс уже запущен и ждёт, пока этот отпустит мьютекс.
+            Environment.Exit(0);
         }
 
         private void OpenBackgroundsFolder()
