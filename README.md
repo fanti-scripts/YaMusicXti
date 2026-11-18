@@ -27,9 +27,13 @@ Python и PowerShell для установки не нужны. Новая ве�
 
 ![Фон на всё окно](docs/screenshots/music-main.png)
 
-**Панель настроек**
+**Панель настроек и галерея «Мои фоны»**
 
 ![Вкладка «Фон»](docs/screenshots/music-panel.png)
+
+**Свойства файла по правому клику**
+
+![Свойства фона](docs/screenshots/music-props.png)
 
 ## Что умеет
 
