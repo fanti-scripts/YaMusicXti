@@ -12,6 +12,66 @@ BLOCK = 4 * 1024 * 1024
 
 MARKER = "__ymApplyCustomBackground"
 
+# Палитра стилей обложек: id, подпись, два цвета градиента.
+# Первые шесть — старые значения coverStyle, чтобы конфиги не ломались.
+COVER_PRESETS = [
+    {"id": "off", "name": "Как есть", "a": "", "b": ""},
+    {"id": "mono", "name": "Ч/б", "a": "#0a0a0a", "b": "#f5f5f5"},
+    {"id": "sepia", "name": "Сепия", "a": "#2a1608", "b": "#ffd9a3"},
+    {"id": "azure", "name": "Лазурь", "a": "#04121f", "b": "#8fe3ff"},
+    {"id": "violet", "name": "Фиолет", "a": "#150726", "b": "#c9a2ff"},
+    {"id": "rose", "name": "Роза", "a": "#2a0714", "b": "#ffb3c9"},
+    {"id": "violet-cyan", "name": "Фиолетово-голубой", "a": "#6a2bff", "b": "#00e5ff"},
+    {"id": "candy", "name": "Конфетный", "a": "#ff9d00", "b": "#00db4e"},
+    {"id": "lilac", "name": "Сиреневый", "a": "#4b1e78", "b": "#f0b6ff"},
+    {"id": "mint-rasp", "name": "Мятно-малиновый", "a": "#a30f3f", "b": "#4ef0c0"},
+    {"id": "superman", "name": "Супермен", "a": "#0b2a6b", "b": "#ff2d55"},
+    {"id": "ruby", "name": "Рубиновый", "a": "#4a0a12", "b": "#ff2e4d"},
+    {"id": "space", "name": "Космос", "a": "#12002e", "b": "#ff3ea5"},
+    {"id": "amethyst", "name": "Аметистово-жёлтый", "a": "#3c0b5e", "b": "#ffd166"},
+    {"id": "peach", "name": "Персиковый", "a": "#5a1f1a", "b": "#ffb59e"},
+    {"id": "lavender", "name": "Лавандовый", "a": "#231348", "b": "#b79cff"},
+    {"id": "purple-sea", "name": "Пурпурно-морской", "a": "#2a0636", "b": "#12c2c8"},
+    {"id": "sunset", "name": "Солнечный закат", "a": "#5a1200", "b": "#ffb703"},
+    {"id": "orange-rose", "name": "Оранжево-розовый", "a": "#6b1a00", "b": "#ff7eb6"},
+    {"id": "blueberry", "name": "Черника", "a": "#0b1030", "b": "#6b8bff"},
+    {"id": "ivy", "name": "Зелёный плющ", "a": "#062a16", "b": "#4ade80"},
+    {"id": "mint-choc", "name": "Мятный шоколад", "a": "#2a1608", "b": "#5eead4"},
+    {"id": "raspberry", "name": "Малиновый смузи", "a": "#3a0018", "b": "#ff5d8f"},
+    {"id": "frost", "name": "Обморожение", "a": "#062033", "b": "#a5f3ff"},
+    {"id": "cold-berry", "name": "Холодная ягода", "a": "#0d0a33", "b": "#7dd3fc"},
+    {"id": "storm", "name": "Грозовое море", "a": "#071a2b", "b": "#38bdf8"},
+    {"id": "emerald", "name": "Изумруд", "a": "#022c22", "b": "#34d399"},
+    {"id": "gold", "name": "Золото", "a": "#2b1a00", "b": "#fbbf24"},
+    {"id": "copper", "name": "Медный", "a": "#2b0f00", "b": "#ff8a3d"},
+    {"id": "turquoise", "name": "Бирюза", "a": "#032a2a", "b": "#2dd4bf"},
+    {"id": "coral", "name": "Коралл", "a": "#2e0a12", "b": "#ff8a80"},
+    {"id": "sky", "name": "Небо", "a": "#06213d", "b": "#7dd3fc"},
+    {"id": "siren", "name": "Сирень", "a": "#1f1235", "b": "#c4b5fd"},
+    {"id": "fire", "name": "Огонь", "a": "#3b0505", "b": "#ff6b35"},
+    {"id": "lime", "name": "Лайм", "a": "#16260a", "b": "#a3e635"},
+    {"id": "fuchsia", "name": "Фуксия", "a": "#2a0630", "b": "#ff4fd8"},
+    {"id": "ocean", "name": "Океан", "a": "#041f33", "b": "#38bdf8"},
+    {"id": "ash", "name": "Пепел", "a": "#111318", "b": "#9aa4b2"},
+    {"id": "terracotta", "name": "Терракота", "a": "#2a0f08", "b": "#e07a5f"},
+    {"id": "sakura", "name": "Сакура", "a": "#2b0a1a", "b": "#ffb7d5"},
+    {"id": "cobalt", "name": "Кобальт", "a": "#041a4a", "b": "#4f7cff"},
+    {"id": "avocado", "name": "Авокадо", "a": "#10230b", "b": "#9ccc65"},
+    {"id": "grape", "name": "Виноград", "a": "#220a33", "b": "#a855f7"},
+    {"id": "glacier", "name": "Ледник", "a": "#0a1a2f", "b": "#93c5fd"},
+    {"id": "toxic", "name": "Токсик", "a": "#1a2b00", "b": "#a3ff12"},
+    {"id": "desert", "name": "Пустыня", "a": "#3a1205", "b": "#ff9f1c"},
+    {"id": "aurora", "name": "Северное сияние", "a": "#031f1a", "b": "#5eead4"},
+    {"id": "neon", "name": "Неон", "a": "#001a14", "b": "#00ffa3"},
+    {"id": "pion", "name": "Пион", "a": "#2a0a14", "b": "#f9a8d4"},
+    {"id": "pomegranate", "name": "Гранат", "a": "#2a050c", "b": "#e11d48"},
+    {"id": "bourbon", "name": "Бурбон", "a": "#2a1208", "b": "#d97706"},
+    {"id": "cosmic", "name": "Космическая пыль", "a": "#120a2a", "b": "#8b5cf6"},
+]
+PRESET_IDS = [p["id"] for p in COVER_PRESETS]
+PRESETS_JSON = json.dumps(COVER_PRESETS, ensure_ascii=False, separators=(",", ":"))
+PRESET_IDS_JSON = json.dumps(PRESET_IDS)
+
 # Движок фона вставляется в renderer через executeJavaScript после загрузки страницы.
 ENGINE = r"""
 (function(){
@@ -20,6 +80,69 @@ ENGINE = r"""
   window.__ymBgV2 = true;
 
   var C = window.__YMBG__ || {};
+  var PRESETS = __PRESETS__;
+  function presetById(id){
+    for(var i = 0; i < PRESETS.length; i++){
+      if(PRESETS[i].id === id) return PRESETS[i];
+    }
+    return null;
+  }
+  function normalizeCoverStyle(v){
+    var s = String(v || '').toLowerCase();
+    return presetById(s) ? s : 'mono';
+  }
+
+  // Дуотон: обложка переводится в ч/б и раскрашивается градиентом пресета —
+  // тёмный тон уходит в тени, светлый в света. Поэтому исходный цвет картинки
+  // не проступает ни в покое, ни на наведении, а палитра в панели совпадает
+  // с тем, что видно на обложках.
+  function hexRgb(h){
+    h = String(h || '').replace('#', '');
+    if(h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    var n = parseInt(h, 16);
+    if(!isFinite(n)) return [0, 0, 0];
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
+
+  var dtKey = '';
+  function ensureDuotone(){
+    if(!document.body) return;
+    var key = PRESETS.length + '|' + PRESETS[PRESETS.length - 1].id;
+    if(document.getElementById('ym-dt') && dtKey === key) return;
+    var old = document.getElementById('ym-dt');
+    if(old && old.parentNode) old.parentNode.removeChild(old);
+    dtKey = key;
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.id = 'ym-dt';
+    svg.setAttribute('aria-hidden', 'true');
+    svg.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;';
+    for(var i = 0; i < PRESETS.length; i++){
+      var p = PRESETS[i];
+      if(!p.a || !p.b) continue;
+      var ca = hexRgb(p.a), cb = hexRgb(p.b);
+      var f = document.createElementNS(NS, 'filter');
+      f.setAttribute('id', 'ymdt-' + p.id);
+      f.setAttribute('color-interpolation-filters', 'sRGB');
+      var m = document.createElementNS(NS, 'feColorMatrix');
+      m.setAttribute('type', 'matrix');
+      m.setAttribute('values', '0.2126 0.7152 0.0722 0 0 ' +
+        '0.2126 0.7152 0.0722 0 0 ' +
+        '0.2126 0.7152 0.0722 0 0 ' +
+        '0 0 0 1 0');
+      var ct = document.createElementNS(NS, 'feComponentTransfer');
+      ['R', 'G', 'B'].forEach(function(ch, idx){
+        var e = document.createElementNS(NS, 'feFunc' + ch);
+        e.setAttribute('type', 'table');
+        e.setAttribute('tableValues', ca[idx].toFixed(3) + ' ' + cb[idx].toFixed(3));
+        ct.appendChild(e);
+      });
+      f.appendChild(m);
+      f.appendChild(ct);
+      svg.appendChild(f);
+    }
+    document.body.appendChild(svg);
+  }
   var cfg = {
     adaptive: !!C.adaptive,
     src: C.src || '',
@@ -39,6 +162,8 @@ ENGINE = r"""
     webBase: C.webBase || '',
     webStamp: Number(C.webStamp) || 0,
     fit: String(C.fit || '') === 'cover' ? 'cover' : 'smart',
+    // Один стиль на все обложки приложения: '' — как есть.
+    coverStyle: normalizeCoverStyle(C.coverStyle),
     token: C.token || ''
   };
 
@@ -99,11 +224,53 @@ ENGINE = r"""
     '[class*="Navbar_root__"]{background-color:rgba(8,8,8,var(--ym-nav)) !important;}',
     '[class*="TitleBar_root"]{background:transparent !important;background-image:none !important;' +
       '-webkit-backdrop-filter:none !important;backdrop-filter:none !important;border:0 !important;box-shadow:none !important;}'
-    ].join('\n');
+    ].concat(themeRules()).join('\n');
+  }
+
+  // Стиль обложек — один на всё приложение: колесо подборок, альбомы,
+  // плейлисты, миксы, артисты. Подложек под плитками нет: под иконками
+  // пусто. Стиль держится и на наведении — исходный цвет не проступает.
+  function themeRules(){
+    var out = [
+      // Жёлтая подпись «Встряхнуть мою волну» — как у остальных плиток колеса.
+      '[class*="WheelItem_title_accentColor"]{color:var(--ym-controls-color-secondary-text-enabled_variant) !important;}'
+    ];
+    var preset = presetById(cfg.coverStyle);
+    var wheel = '[class*="WheelItem_cover"] img, [class*="WheelItem_cover"] svg';
+    var cover = 'img[class*="_cover__"], [class*="_cover__"] img';
+    var avatar = 'img[class*="_avatar__"], [class*="_avatar__"] img, ' +
+      'img[class*="ArtistCard_image"], [class*="ArtistItem_image"] img, ' +
+      '[class*="ArtistsContent_image"] img, [class*="ArtistRecommendationMeta_avatar"] img, ' +
+      '[class*="VibeRoomMemberAvatar"] img';
+    if(preset && preset.a && preset.b){
+      var ref = 'url(#ymdt-' + preset.id + ')';
+      var base = 'filter:' + ref + ' !important;transition:filter .18s ease !important;';
+      // Наведение лишь чуть подсвечивает плитку в том же тоне.
+      var hot = 'filter:' + ref + ' brightness(1.07) !important;';
+      function hoverEach(list){
+        return list.split(',').map(function(s){ return s.trim() + ':hover'; }).join(', ');
+      }
+      var reveal = '[class*="WheelItem_root"]:hover img[class*="WheelItem_cover"], ' +
+        'a:hover img[class*="_cover__"], button:hover img[class*="_cover__"], ' +
+        '[class*="Card_root"]:hover img[class*="_cover__"], [class*="Item_root"]:hover img[class*="_cover__"], ' +
+        '[class*="Cell_root"]:hover img[class*="_cover__"], ' +
+        'a:hover img[class*="_avatar__"], button:hover img[class*="_avatar__"], ' +
+        '[class*="Card_root"]:hover img[class*="_avatar__"], [class*="Item_root"]:hover img[class*="_avatar__"]';
+      out.push(
+        wheel + ', ' + cover + ', ' + avatar + '{' + base + '}',
+        hoverEach(wheel) + ', ' + hoverEach(cover) + ', ' + hoverEach(avatar) + ', ' + reveal + '{' + hot + '}'
+      );
+    }
+    // Своя аватарка в меню (UserIcon/UserID) всегда цветная.
+    out.push('img[class*="UserIcon_"], [class*="UserIcon_root"] img, ' +
+      'img[class*="UserID-Avatar"], [class*="UserID-Avatar"] img, [class*="UserID-Avatar"] *' +
+      '{filter:none !important;opacity:1 !important;}');
+    return out;
   }
   var STYLE = buildStyle();
 
   function ensureStyle(){
+    ensureDuotone();
     var s = document.getElementById('ym-bg-style');
     if(!s){ s = document.createElement('style'); s.id = 'ym-bg-style'; document.head.appendChild(s); }
     if(s.textContent !== STYLE) s.textContent = STYLE;
@@ -483,6 +650,7 @@ ENGINE = r"""
       if(d[k] !== undefined && d[k] !== null && d[k] !== '') cfg[k] = Number(d[k]);
     });
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
+    if(d.coverStyle !== undefined) cfg.coverStyle = normalizeCoverStyle(d.coverStyle);
     var fitChanged = false;
     if(d.fit !== undefined){
       var f = String(d.fit || '') === 'cover' ? 'cover' : 'smart';
@@ -569,9 +737,19 @@ ENGINE = r"""
     '.ym-chip{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7);border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;}',
     '.ym-chip:hover{background:rgba(255,255,255,.1);color:#fff;}',
     '.ym-chip.on{background:rgba(255,219,77,.16);border-color:rgba(255,219,77,.55);color:#ffdb4d;}',
+    '.ym-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-top:12px;}',
+    '.ym-swatch{position:relative;height:74px;border:0;border-radius:11px;cursor:pointer;padding:8px 9px;box-sizing:border-box;text-align:left;overflow:hidden;font-family:inherit;background-color:#1b1e25;background-size:cover;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:transform .14s,box-shadow .14s;}',
+    '.ym-swatch:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.24),0 6px 14px rgba(0,0,0,.35);}',
+    '.ym-swatch.on{box-shadow:inset 0 0 0 2px #ffdb4d,0 6px 16px rgba(0,0,0,.4);}',
+    '.ym-swatch-name{position:relative;z-index:2;display:block;font-size:11.5px;font-weight:600;line-height:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);max-height:28px;overflow:hidden;padding-right:22px;}',
+    '.ym-swatch-hex{position:absolute;left:9px;right:9px;bottom:7px;z-index:2;font-size:9px;line-height:11px;color:rgba(255,255,255,.88);text-shadow:0 1px 2px rgba(0,0,0,.75);letter-spacing:.2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}',
+    '.ym-swatch-num{position:absolute;right:7px;top:7px;z-index:2;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:rgba(0,0,0,.42);color:#fff;font-size:9.5px;font-weight:700;line-height:17px;text-align:center;box-sizing:border-box;}',
+    '.ym-swatch-none{background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.08) 0 6px,rgba(255,255,255,.02) 6px 12px) !important;}',
+    '.ym-swatch-none .ym-swatch-hex{color:rgba(255,255,255,.55);}',
     '.ym-fitrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:12.5px;color:#d7dbe3;}',
     '.ym-fitrow .ym-chips{flex-wrap:nowrap;}',
     '.ym-gallery-card{margin-top:16px;}',
+    '.ym-page-body > .ym-card.ym-settings,.ym-page-body > .ym-card.ym-themes{margin-top:16px;}',
     '.ym-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(156px,1fr));gap:10px;margin-top:12px;}',
     '.ym-gal-empty{display:none;font-size:12.5px;color:rgba(255,255,255,.4);margin-top:10px;}',
     '.ym-gal-tile{position:relative;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#0b0d11;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:border-color .15s,transform .15s;}',
@@ -695,6 +873,23 @@ ENGINE = r"""
           '<div class="ym-ctl"><div class="ym-row"><span>Размытие плеера</span><b class="ym-pblurv"></b></div><input type="range" class="ym-range ym-pblur" min="0" max="40" step="1"></div>',
           '<div class="ym-ctl"><div class="ym-row"><span>Насыщенность плеера</span><b class="ym-psatv"></b></div><input type="range" class="ym-range ym-psat" min="0.5" max="2" step="0.01"></div>',
         '</div>',
+      '</section>',
+      '<section class="ym-card ym-themes">',
+        '<div class="ym-card-head">',
+          '<div class="ym-card-title">Обложки</div>',
+          '<div class="ym-card-label ym-coverstyle-now"></div>',
+        '</div>',
+        '<div class="ym-swatches">' + PRESETS.map(function(p, i){
+          var two = !!(p.a && p.b);
+          var grad = two ? ('linear-gradient(135deg,' + p.a + ' 0%,' + p.b + ' 100%)') : '';
+          return '<button class="ym-swatch' + (two ? '' : ' ym-swatch-none') + '"' +
+            ' data-style="' + p.id + '" title="' + p.name + '"' +
+            (grad ? ' style="background-image:' + grad + '"' : '') + '>' +
+            '<span class="ym-swatch-num">' + (i + 1) + '</span>' +
+            '<span class="ym-swatch-name">' + p.name + '</span>' +
+            '<span class="ym-swatch-hex">' + (two ? (p.a + ' · ' + p.b) : 'без эффекта') + '</span>' +
+            '</button>';
+        }).join('') + '</div>',
       '</section>',
     '</div>',
     '<div class="ym-page-foot">',
@@ -848,6 +1043,9 @@ ENGINE = r"""
     var dimV = q('.ym-dimv'), blurV = q('.ym-blurv'), brightV = q('.ym-brightv'), vigV = q('.ym-vigv'), navV = q('.ym-navv');
     var ptransV = q('.ym-ptransv'), pblurV = q('.ym-pblurv'), psatV = q('.ym-psatv');
     var adaptEl = q('.ym-adapt');
+    var styleBtns = page.querySelectorAll('.ym-swatch');
+    var coverStyle = normalizeCoverStyle(cfg.coverStyle);
+    var styleNow = q('.ym-coverstyle-now');
     var fitBtns = page.querySelectorAll('.ym-fit');
     var fit = String(cfg.fit || '') === 'cover' ? 'cover' : 'smart';
     var statusEl = q('.ym-status');
@@ -863,6 +1061,14 @@ ENGINE = r"""
       for(var i = 0; i < fitBtns.length; i++){
         fitBtns[i].classList.toggle('on', fitBtns[i].getAttribute('data-fit') === fit);
       }
+    }
+
+    function markStyle(){
+      for(var i = 0; i < styleBtns.length; i++){
+        styleBtns[i].classList.toggle('on', styleBtns[i].getAttribute('data-style') === coverStyle);
+      }
+      var cur = presetById(coverStyle);
+      if(styleNow) styleNow.textContent = cur ? cur.name : '';
     }
 
     function status(text, bad){
@@ -897,7 +1103,8 @@ ENGINE = r"""
         playerBlur: Number(pblurEl.value),
         playerSaturate: Number(psatEl.value),
         fit: fit,
-        adaptive: !!adaptEl.checked
+        adaptive: !!adaptEl.checked,
+        coverStyle: coverStyle
       };
     }
     function push(delay){
@@ -1343,6 +1550,7 @@ ENGINE = r"""
     pblurEl.value = (cfg.playerBlur === undefined ? 20 : cfg.playerBlur);
     psatEl.value = (cfg.playerSaturate === undefined ? 1.15 : cfg.playerSaturate);
     adaptEl.checked = !!cfg.adaptive;
+    markStyle();
     if(cfg.web){
       nameEl.textContent = 'HTML-обои';
       dsub.textContent = /^https?:\/\//i.test(cfg.web) ? 'Веб-обои по ссылке' : 'Веб-обои из .zip';
@@ -1405,11 +1613,22 @@ ENGINE = r"""
       el.addEventListener('input', function(){ labels(); push(400); });
     });
     adaptEl.addEventListener('change', function(){ push(0); });
+    for(var si = 0; si < styleBtns.length; si++){
+      styleBtns[si].addEventListener('click', function(){
+        coverStyle = normalizeCoverStyle(this.getAttribute('data-style'));
+        markStyle();
+        push(0);
+        var cur = presetById(coverStyle);
+        status('Обложки: ' + (cur ? cur.name : coverStyle));
+      });
+    }
     q('.ym-apply').addEventListener('click', function(){ push(0); status('Применено'); });
     q('.ym-reset').addEventListener('click', function(){
       dimEl.value = 0.25; blurEl.value = 0; brightEl.value = 1; vigEl.value = 0; navEl.value = 0.35;
       ptransEl.value = 0.48; pblurEl.value = 20; psatEl.value = 1.15;
       adaptEl.checked = false;
+      coverStyle = 'mono';
+      markStyle();
       fit = 'smart';
       markFit();
       labels();
@@ -1537,6 +1756,9 @@ ENGINE = r"""
 })();
 """
 
+# Палитра и список id подставляются в движок и в Node-часть патча.
+ENGINE = ENGINE.replace("__PRESETS__", PRESETS_JSON)
+
 INJECT_FUNC = r"""
 function __ymBgUserDir(){
   return require('electron').app.getPath('userData');
@@ -1612,6 +1834,14 @@ function __ymBgMediaInfo(file){
   return {ext: ext, isVideo: videoExts.indexOf(ext) !== -1, mime: mimes[ext] || ''};
 }
 
+// Стиль обложек: одна настройка на всё приложение.
+// Список id подставляется из палитры COVER_PRESETS при сборке патча.
+const COVER_STYLES = __PRESET_IDS__;
+function normalizeCoverStyle(v){
+  const s = String(v || '').toLowerCase();
+  return COVER_STYLES.indexOf(s) === -1 ? 'mono' : s;
+}
+
 function __ymBgReadPayload(){
   const __fs = require('node:fs');
   const __path = require('node:path');
@@ -1664,6 +1894,7 @@ function __ymBgReadPayload(){
 
   return {
     adaptive: !!__cfg.adaptive,
+    coverStyle: normalizeCoverStyle(__cfg.coverStyle),
     src: __src,
     isVideo: __isVideo,
     web: String(__cfg.web || ''),
@@ -1689,6 +1920,7 @@ function __ymBgReadPayload(){
 function __ymBgSettingsPayload(cfg){
   return {
     adaptive: !!cfg.adaptive,
+    coverStyle: normalizeCoverStyle(cfg.coverStyle),
     web: String(cfg.web || ''),
     webStamp: Number(cfg.webStamp) || 0,
     webBase: cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
@@ -1775,6 +2007,9 @@ function __ymBgStartServer(){
       out[k] = Math.min(NUMERIC[k][1], Math.max(NUMERIC[k][0], n));
     });
     if(out.adaptive !== undefined) out.adaptive = !!out.adaptive;
+    if(out.coverStyle !== undefined) out.coverStyle = normalizeCoverStyle(out.coverStyle);
+    // Старые три галочки тем больше не нужны.
+    delete out.wheelQuiet; delete out.coverQuiet; delete out.avatarQuiet;
     if(out.file !== undefined) out.file = path.basename(String(out.file || ''));
     return out;
   }
@@ -3249,6 +3484,7 @@ function __ymBgStartServer(){
     });
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
     else if(mediaChanged) cfg.adaptive = false;
+    if(d.coverStyle !== undefined) cfg.coverStyle = normalizeCoverStyle(d.coverStyle);
     if(d.fit !== undefined){
       cfg.fit = normalizeFit(d.fit);
     }
@@ -3655,7 +3891,7 @@ function __ymApplyCustomBackground(wc){
       .catch(function(){});
   }catch(e){}
 }
-""".replace("ENGINE_JS", json.dumps(ENGINE))
+""".replace("__PRESET_IDS__", PRESET_IDS_JSON).replace("ENGINE_JS", json.dumps(ENGINE))
 
 ANCHOR_FUNC = "const electron=require('electron')"
 ANCHOR_HANDLER = 'webContents.on("did-finish-load", () => {'
