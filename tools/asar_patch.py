@@ -79,6 +79,40 @@ ENGINE = r"""
   if(window.__ymBgV2) return;
   window.__ymBgV2 = true;
 
+  // Позиция трека: звук в Яндекс Музыке идёт через MediaSource, поэтому
+  // <audio>.duration часто равен длине буфера (около 10 секунд), а не песни.
+  // Ловим setPositionState — там настоящее время и длительность.
+  (function(){
+    if(window.__ymBgPosHook) return;
+    window.__ymBgPosHook = true;
+    window.__ymBgPos = null;
+    var ms;
+    try{ ms = navigator.mediaSession; }catch(e){}
+    if(!ms) return;
+    function wrap(obj){
+      if(!obj || typeof obj.setPositionState !== 'function') return;
+      var orig = obj.setPositionState;
+      if(orig.__ymBgWrapped) return;
+      var wrapped = function(state){
+        try{
+          if(state && isFinite(state.duration) && state.duration > 0){
+            window.__ymBgPos = {
+              duration: Number(state.duration),
+              position: Number(state.position) || 0,
+              rate: isFinite(state.playbackRate) ? Number(state.playbackRate) : 1,
+              at: Date.now()
+            };
+          }
+        }catch(e){}
+        return orig.apply(obj, arguments);
+      };
+      wrapped.__ymBgWrapped = true;
+      try{ obj.setPositionState = wrapped; }catch(e){}
+    }
+    wrap(ms);
+    try{ wrap(Object.getPrototypeOf(ms)); }catch(e){}
+  })();
+
   var C = window.__YMBG__ || {};
   var PRESETS = __PRESETS__;
   function presetById(id){
@@ -164,6 +198,8 @@ ENGINE = r"""
     fit: String(C.fit || '') === 'cover' ? 'cover' : 'smart',
     // Один стиль на все обложки приложения: '' — как есть.
     coverStyle: normalizeCoverStyle(C.coverStyle),
+    discordRpc: !!C.discordRpc,
+    discordClientId: String(C.discordClientId || ''),
     token: C.token || ''
   };
 
@@ -651,6 +687,9 @@ ENGINE = r"""
     });
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
     if(d.coverStyle !== undefined) cfg.coverStyle = normalizeCoverStyle(d.coverStyle);
+    if(d.discordRpc !== undefined) cfg.discordRpc = !!d.discordRpc;
+    if(d.discordClientId !== undefined) cfg.discordClientId = String(d.discordClientId || '').replace(/[^0-9]/g, '').slice(0, 20);
+    setRpcWatchers(cfg.discordRpc);
     var fitChanged = false;
     if(d.fit !== undefined){
       var f = String(d.fit || '') === 'cover' ? 'cover' : 'smart';
@@ -804,7 +843,10 @@ ENGINE = r"""
     '.ym-close{width:36px;height:36px;border-radius:10px;background:transparent;border:0;color:rgba(255,255,255,.5);font-size:17px;cursor:pointer;flex:0 0 auto;}',
     '.ym-close:hover{background:rgba(255,255,255,.08);color:#fff;}',
     '#ym-nav-bg.ym-nav-active{color:#e6e6e6 !important;}',
-    '#ym-nav-bg:hover{color:#fff;}'
+    '#ym-nav-bg:hover{color:#fff;}',
+    '.ym-discord .ym-urlrow{margin-top:8px;}',
+    '.ym-rpc-state.ok{color:#7ee787;}',
+    '.ym-rpc-state.bad{color:#ff8a8a;}'
   ].join('\n');
 
   var PANEL_HTML = [
@@ -873,6 +915,18 @@ ENGINE = r"""
           '<div class="ym-ctl"><div class="ym-row"><span>Размытие плеера</span><b class="ym-pblurv"></b></div><input type="range" class="ym-range ym-pblur" min="0" max="40" step="1"></div>',
           '<div class="ym-ctl"><div class="ym-row"><span>Насыщенность плеера</span><b class="ym-psatv"></b></div><input type="range" class="ym-range ym-psat" min="0.5" max="2" step="0.01"></div>',
         '</div>',
+      '</section>',
+      '<section class="ym-card ym-discord">',
+        '<div class="ym-card-head">',
+          '<div class="ym-card-title">Discord</div>',
+          '<div class="ym-card-label ym-rpc-state"></div>',
+        '</div>',
+        '<label class="ym-switch-row"><span>Показывать трек в статусе Discord</span><input type="checkbox" class="ym-rpc"><span class="ym-switch"></span></label>',
+        '<div class="ym-urlrow">',
+          '<input class="ym-input ym-rpcid" maxlength="24" inputmode="numeric" placeholder="Application ID из Discord Developer Portal">',
+          '<button class="ym-btn ghost ym-rpc-save">Сохранить</button>',
+        '</div>',
+        '<div class="ym-hint">Application ID берётся из приложения на discord.com/developers/applications. В статусе появится кнопка со ссылкой на мод.</div>',
       '</section>',
       '<section class="ym-card ym-themes">',
         '<div class="ym-card-head">',
@@ -1043,6 +1097,9 @@ ENGINE = r"""
     var dimV = q('.ym-dimv'), blurV = q('.ym-blurv'), brightV = q('.ym-brightv'), vigV = q('.ym-vigv'), navV = q('.ym-navv');
     var ptransV = q('.ym-ptransv'), pblurV = q('.ym-pblurv'), psatV = q('.ym-psatv');
     var adaptEl = q('.ym-adapt');
+    var rpcEl = q('.ym-rpc');
+    var rpcIdEl = q('.ym-rpcid');
+    var rpcStateEl = q('.ym-rpc-state');
     var styleBtns = page.querySelectorAll('.ym-swatch');
     var coverStyle = normalizeCoverStyle(cfg.coverStyle);
     var styleNow = q('.ym-coverstyle-now');
@@ -1075,6 +1132,25 @@ ENGINE = r"""
       statusEl.textContent = text || '';
       statusEl.style.color = bad ? '#ff8a8a' : 'rgba(255,255,255,.45)';
     }
+    var rpcPoll = null;
+    function refreshRpc(){
+      try{
+        fetch('http://127.0.0.1:47823/rpc', {headers: {'x-ymbg-token': cfg.token || ''}})
+          .then(function(r){ return r.json(); })
+          .then(function(r){
+            if(!rpcStateEl) return;
+            var s = r && r.status ? r.status : 'off';
+            var map = {off: 'выключено', 'no-id': 'нужен Application ID',
+                       'no-discord': 'Discord не запущен', connecting: 'подключаюсь…',
+                       ok: 'подключено', error: 'ошибка'};
+            rpcStateEl.textContent = map[s] || s;
+            rpcStateEl.className = 'ym-card-label ym-rpc-state' +
+              (s === 'ok' ? ' ok' : (s === 'error' ? ' bad' : ''));
+            if(s === 'error' && r && r.error) rpcStateEl.title = r.error;
+            else rpcStateEl.removeAttribute('title');
+          }).catch(function(){});
+      }catch(e){}
+    }
     function fill(el){
       var min = Number(el.min) || 0, max = Number(el.max) || 1;
       var p = (Number(el.value) - min) / (max - min) * 100;
@@ -1104,7 +1180,9 @@ ENGINE = r"""
         playerSaturate: Number(psatEl.value),
         fit: fit,
         adaptive: !!adaptEl.checked,
-        coverStyle: coverStyle
+        coverStyle: coverStyle,
+        discordRpc: !!rpcEl.checked,
+        discordClientId: String(rpcIdEl.value || '').replace(/[^0-9]/g, '').slice(0, 20)
       };
     }
     function push(delay){
@@ -1550,6 +1628,8 @@ ENGINE = r"""
     pblurEl.value = (cfg.playerBlur === undefined ? 20 : cfg.playerBlur);
     psatEl.value = (cfg.playerSaturate === undefined ? 1.15 : cfg.playerSaturate);
     adaptEl.checked = !!cfg.adaptive;
+    rpcEl.checked = !!cfg.discordRpc;
+    rpcIdEl.value = String(cfg.discordClientId || '');
     markStyle();
     if(cfg.web){
       nameEl.textContent = 'HTML-обои';
@@ -1613,6 +1693,25 @@ ENGINE = r"""
       el.addEventListener('input', function(){ labels(); push(400); });
     });
     adaptEl.addEventListener('change', function(){ push(0); });
+    rpcEl.addEventListener('change', function(){
+      if(rpcEl.checked && !String(rpcIdEl.value || '').trim()){
+        status('Сначала вставь Application ID', true);
+      }
+      push(0);
+      refreshRpc();
+    });
+    q('.ym-rpc-save').addEventListener('click', function(){
+      if(!String(rpcIdEl.value || '').trim()){
+        status('Вставь Application ID из Discord Developer Portal', true);
+        return;
+      }
+      push(0);
+      status('Discord: сохранено');
+      refreshRpc();
+    });
+    rpcIdEl.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ q('.ym-rpc-save').click(); }
+    });
     for(var si = 0; si < styleBtns.length; si++){
       styleBtns[si].addEventListener('click', function(){
         coverStyle = normalizeCoverStyle(this.getAttribute('data-style'));
@@ -1636,11 +1735,15 @@ ENGINE = r"""
       status('Сброшено');
     });
 
+    refreshRpc();
+    rpcPoll = setInterval(refreshRpc, 2500);
+
     document.addEventListener('keydown', panelEsc);
     document.addEventListener('click', navGuard, true);
     window.addEventListener('resize', positionPage);
     page.__ymCleanup = function(){
       window.removeEventListener('ymbg:update', onBgUpdate);
+      if(rpcPoll){ clearInterval(rpcPoll); rpcPoll = null; }
       if(galObserver){ try{ galObserver.disconnect(); }catch(e){} galObserver = null; }
     };
     if(pageTimer) clearInterval(pageTimer);
@@ -1716,6 +1819,117 @@ ENGINE = r"""
     setTimeout(function(){ scheduled = false; tick(); }, 150);
   }
 
+  // Discord: renderer присылает текущий трек главному процессу, а тот
+  // общается с Discord по именованному каналу. Так не нужен ни Python,
+  // ни отдельная программа.
+  var rpcTimer = null;
+  var rpcLastKey = '';
+  var rpcLastAt = 0;
+  function rpcSend(obj){
+    try{
+      fetch('http://127.0.0.1:47823/rpc', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        body: JSON.stringify(obj)
+      }).catch(function(){});
+    }catch(e){}
+  }
+  function rpcSnapshot(){
+    var md = null;
+    try{ md = navigator.mediaSession && navigator.mediaSession.metadata; }catch(e){}
+    var title = md && md.title ? String(md.title) : '';
+    var artist = md && md.artist ? String(md.artist) : '';
+    var album = md && md.album ? String(md.album) : '';
+    var cover = '';
+    try{
+      if(md && md.artwork && md.artwork.length){
+        cover = String(md.artwork[md.artwork.length - 1].src || '');
+      }
+    }catch(e){}
+    if(!cover) cover = coverUrl() || '';
+    if(cover) cover = hiRes(cover);
+    var playing = false;
+    try{ playing = !!(navigator.mediaSession && navigator.mediaSession.playbackState === 'playing'); }catch(e){}
+    if(!title){
+      var bar = document.querySelector('[class*="PlayerBarDesktop_root"], [class*="PlayerBar_root"], [class*="VibePlayerBar_root"]');
+      if(bar){
+        var lines = String(bar.innerText || '').split('\n').map(function(v){ return v.trim(); }).filter(Boolean);
+        if(lines.length){
+          title = lines[0] || '';
+          for(var i = 1; i < lines.length && !artist; i++){
+            if(!/^\d+:\d+/.test(lines[i])) artist = lines[i];
+          }
+        }
+      }
+    }
+    var pos = 0, dur = 0;
+    // 1) Настоящие значения из mediaSession.setPositionState.
+    try{
+      var ps = window.__ymBgPos;
+      if(ps && isFinite(ps.duration) && ps.duration > 0){
+        dur = ps.duration;
+        pos = ps.position || 0;
+        if(playing && isFinite(ps.rate)) pos += (Date.now() - ps.at) / 1000 * ps.rate;
+        if(pos < 0) pos = 0;
+        if(pos > dur) pos = dur;
+      }
+    }catch(e){}
+    // 2) Текст плеера вида «1:23 / 4:56» — если позиции ещё нет.
+    if(!dur){
+      try{
+        var barEl = document.querySelector('[class*="PlayerBarDesktop_root"], [class*="PlayerBar_root"], [class*="PlayerBarDesktop"]');
+        var text = barEl ? String(barEl.innerText || '') : '';
+        var times = [];
+        var re = /(\d{1,2}):(\d{2})/g, mm;
+        while((mm = re.exec(text))) times.push(Number(mm[1]) * 60 + Number(mm[2]));
+        if(times.length >= 2){
+          dur = times[times.length - 1];
+          pos = times[times.length - 2];
+        }
+      }catch(e){}
+    }
+    // 3) <audio>/<video> — запасной вариант.
+    if(!dur){
+      try{
+        var media = document.querySelectorAll('audio, video');
+        for(var j = 0; j < media.length; j++){
+          var a = media[j];
+          if(!a || !isFinite(a.duration) || a.duration <= 0) continue;
+          if(!a.paused) playing = true;
+          if(!a.paused || a.currentTime > 0){
+            pos = Number(a.currentTime) || 0;
+            dur = Number(a.duration) || 0;
+            break;
+          }
+        }
+      }catch(e){}
+    }
+    return {title: title, artist: artist, album: album, cover: cover,
+            playing: playing, pos: pos, dur: dur};
+  }
+  function rpcTick(){
+    if(!cfg.discordRpc) return;
+    var s = rpcSnapshot();
+    // Пауза, смена трека, перемотка раз в 10 секунд — этого хватает.
+    var key = [s.title, s.artist, s.album, s.cover, s.playing ? 1 : 0,
+               Math.round(s.dur), Math.round(s.pos / 10)].join('\u0001');
+    var now = Date.now();
+    // Раз в 25 секунд повторяем, чтобы статус не считался устаревшим на паузе.
+    if(key === rpcLastKey && now - rpcLastAt < 25000) return;
+    rpcLastKey = key;
+    rpcLastAt = now;
+    rpcSend(s);
+  }
+  function setRpcWatchers(on){
+    if(on){
+      if(!rpcTimer) rpcTimer = setInterval(rpcTick, 2500);
+      rpcTick();
+    } else {
+      if(rpcTimer){ clearInterval(rpcTimer); rpcTimer = null; }
+      rpcLastKey = '';
+    }
+  }
+
   function boot(){
     ensureStyle();
     ensureRoot();
@@ -1736,6 +1950,7 @@ ENGINE = r"""
     if(cfg.adaptive){
       setAdaptiveWatchers(true);
     }
+    setRpcWatchers(!!cfg.discordRpc);
 
     // Страховка: если приложение пересоздало body — возвращаем слой.
     setInterval(function(){
@@ -1895,6 +2110,8 @@ function __ymBgReadPayload(){
   return {
     adaptive: !!__cfg.adaptive,
     coverStyle: normalizeCoverStyle(__cfg.coverStyle),
+    discordRpc: !!__cfg.discordRpc,
+    discordClientId: __ymBgDiscordId(__cfg.discordClientId),
     src: __src,
     isVideo: __isVideo,
     web: String(__cfg.web || ''),
@@ -1921,6 +2138,8 @@ function __ymBgSettingsPayload(cfg){
   return {
     adaptive: !!cfg.adaptive,
     coverStyle: normalizeCoverStyle(cfg.coverStyle),
+    discordRpc: !!cfg.discordRpc,
+    discordClientId: __ymBgDiscordId(cfg.discordClientId),
     web: String(cfg.web || ''),
     webStamp: Number(cfg.webStamp) || 0,
     webBase: cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
@@ -1947,6 +2166,270 @@ function __ymBgBroadcast(payload){
       try{ w.webContents.executeJavaScript(js, true).catch(function(){}); }catch(e){}
     });
   }catch(e){}
+}
+
+// Discord Rich Presence: главный процесс говорит с Discord по каналу
+// discord-ipc-N, а трек ему присылает renderer на /rpc.
+function __ymBgDiscordId(v){
+  return String(v || '').replace(/[^0-9]/g, '').slice(0, 20);
+}
+
+function __ymBgDiscordConfig(){
+  try{
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const f = path.join(__ymBgCacheDir(), 'custom-background.json');
+    const raw = fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '');
+    const c = JSON.parse(raw) || {};
+    return {on: !!c.discordRpc, id: __ymBgDiscordId(c.discordClientId)};
+  }catch(e){ return {on: false, id: ''}; }
+}
+
+function __ymBgDiscordStart(){
+  if(global.__ymBgDiscord) return;
+  const net = require('node:net');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const DIR = __ymBgCacheDir();
+  const REPO_URL = 'https://github.com/fanti-scripts/yandex-music-bg';
+
+  function log(text){
+    try{
+      fs.mkdirSync(DIR, {recursive: true});
+      const f = path.join(DIR, 'discord.log');
+      let size = 0;
+      try{ size = fs.statSync(f).size; }catch(e){}
+      if(size > 200000) fs.writeFileSync(f, '');
+      fs.appendFileSync(f, new Date().toISOString() + '  ' + text + '\n', 'utf8');
+    }catch(e){}
+  }
+
+  const st = {
+    sock: null, ready: false, id: '', seq: 0, buf: Buffer.alloc(0),
+    retryAt: 0, backoff: 2000, status: 'off', error: '',
+    active: false, lastKey: '', lastSent: 0
+  };
+  global.__ymBgDiscord = st;
+  global.__ymBgDiscordLog = log;
+  global.__ymBgDiscordStatus = function(){
+    return {status: st.status, error: st.error, ready: st.ready};
+  };
+
+  function setStatus(s, err){ st.status = s; st.error = err || ''; }
+
+  function close(){
+    const s = st.sock;
+    st.sock = null;
+    st.ready = false;
+    st.buf = Buffer.alloc(0);
+    if(s){ try{ s.destroy(); }catch(e){} }
+  }
+
+  function send(op, obj){
+    const s = st.sock;
+    if(!s || s.destroyed) return false;
+    let body;
+    try{ body = Buffer.from(JSON.stringify(obj), 'utf8'); }catch(e){ return false; }
+    if(body.length > 1024 * 1024) return false;
+    const head = Buffer.alloc(8);
+    head.writeUInt32LE(op, 0);
+    head.writeUInt32LE(body.length, 4);
+    try{ s.write(Buffer.concat([head, body])); return true; }
+    catch(e){ return false; }
+  }
+
+  function searchUrl(text){
+    const base = 'https://music.yandex.ru/search?text=';
+    const s = String(text || '').trim();
+    for(let cut = s.length; cut > 0; cut -= 2){
+      const q = s.slice(0, cut).trim();
+      if(!q) break;
+      const url = base + encodeURIComponent(q);
+      if(url.length <= 250) return url;
+    }
+    return '';
+  }
+
+  function buildActivity(track){
+    const title = String(track.title || '').slice(0, 128);
+    const artist = String(track.artist || '').slice(0, 128);
+    const album = String(track.album || '').slice(0, 128);
+    const act = {
+      type: 2,
+      details: title,
+      state: (artist || 'Яндекс Музыка') + (track.playing ? '' : ' · пауза'),
+      instance: false
+    };
+    const cover = String(track.cover || '');
+    if(/^https:\/\//i.test(cover) && cover.length <= 256){
+      act.assets = {large_image: cover, large_text: album || 'Яндекс Музыка'};
+    }
+    if(track.playing && track.dur > 0 && track.pos >= 0 && track.pos < track.dur){
+      const now = Date.now();
+      act.timestamps = {
+        start: now - Math.round(track.pos * 1000),
+        end: now + Math.round((track.dur - track.pos) * 1000)
+      };
+    }
+    const buttons = [{label: 'Мод «Свой фон»', url: REPO_URL}];
+    const search = searchUrl((artist + ' ' + title).trim());
+    if(search) buttons.push({label: 'Найти трек', url: search});
+    act.buttons = buttons;
+    return act;
+  }
+
+  function setActivity(track){
+    if(!st.ready) return;
+    const act = track && track.title ? buildActivity(track) : null;
+    const key = act ? [track.title, track.artist, track.album, track.cover,
+                       track.playing ? 1 : 0, Math.round(track.dur),
+                       Math.round(track.pos / 10)].join('\u0001') : '';
+    const now = Date.now();
+    if(key === st.lastKey && st.active === !!act && now - st.lastSent < 20000) return;
+    st.seq += 1;
+    const ok = send(1, {
+      cmd: 'SET_ACTIVITY',
+      args: {pid: process.pid, activity: act},
+      nonce: String(st.seq)
+    });
+    if(ok){
+      st.lastKey = key;
+      st.active = !!act;
+      st.lastSent = now;
+    }
+  }
+
+  function drop(reason){
+    if(st.sock) log('Discord: соединение потеряно (' + reason + ')');
+    close();
+    st.ready = false;
+    st.lastKey = '';
+    st.active = false;
+    st.retryAt = Date.now() + st.backoff;
+    st.backoff = Math.min(st.backoff * 1.7, 30000);
+    setStatus('error', reason);
+  }
+
+  function onData(chunk){
+    st.buf = Buffer.concat([st.buf, chunk]);
+    while(st.buf.length >= 8){
+      const op = st.buf.readUInt32LE(0);
+      const len = st.buf.readUInt32LE(4);
+      if(len > 1024 * 1024){ drop('слишком большой кадр'); return; }
+      if(st.buf.length < 8 + len) break;
+      const body = st.buf.slice(8, 8 + len).toString('utf8');
+      st.buf = st.buf.slice(8 + len);
+      let msg = {};
+      try{ msg = JSON.parse(body) || {}; }catch(e){ msg = {}; }
+      if(op === 3){ send(4, msg); continue; }
+      if(op === 2){ drop('Discord закрыл канал'); return; }
+      if(msg.evt === 'READY'){
+        st.ready = true;
+        st.backoff = 2000;
+        st.retryAt = 0;
+        st.lastKey = '';
+        st.active = false;
+        setStatus('ok');
+        const user = msg.data && msg.data.user ? msg.data.user.username : '';
+        log('подключено к Discord' + (user ? ' как ' + user : ''));
+      } else if(msg.evt === 'ERROR'){
+        const data = msg.data || {};
+        setStatus('error', data.message || 'ошибка Discord');
+        log('ошибка Discord: ' + JSON.stringify(data));
+        if(data.code === 4000){   // неверный Application ID — не долбим Discord
+          close();
+          st.retryAt = Date.now() + 600000;
+        }
+      }
+    }
+  }
+
+  function connect(id){
+    close();
+    st.ready = false;
+    const override = String(process.env.YMBG_DISCORD_PIPE || '').trim();
+    let idx = 0;
+    (function next(){
+      if(st.id !== id) return;
+      if(idx > 9){
+        setStatus('no-discord');
+        st.retryAt = Date.now() + st.backoff;
+        st.backoff = Math.min(st.backoff * 1.7, 30000);
+        return;
+      }
+      const pipe = override || ('\\\\.\\pipe\\discord-ipc-' + idx);
+      const s = net.connect(pipe);
+      let connected = false;
+      s.once('connect', function(){
+        connected = true;
+        st.sock = s;
+        st.buf = Buffer.alloc(0);
+        try{ s.setNoDelay(true); }catch(e){}
+        send(0, {v: 1, client_id: id});
+      });
+      s.once('error', function(e){
+        try{ s.destroy(); }catch(_){}
+        if(!connected){
+          idx = override ? 10 : idx + 1;
+          next();
+        } else {
+          drop((e && e.code) || 'error');
+        }
+      });
+      s.once('close', function(){
+        if(st.sock === s) drop('канал закрыт');
+      });
+      s.on('data', function(chunk){
+        if(st.sock === s) onData(chunk);
+      });
+    })();
+  }
+
+  function tick(){
+    const conf = __ymBgDiscordConfig();
+    if(!conf.on){
+      if(st.active) setActivity(null);
+      if(st.sock) close();
+      st.id = '';
+      st.lastKey = '';
+      setStatus('off');
+      return;
+    }
+    if(!conf.id){
+      if(st.active) setActivity(null);
+      if(st.sock) close();
+      st.id = '';
+      setStatus('no-id');
+      return;
+    }
+    if(st.id !== conf.id){
+      close();
+      st.id = conf.id;
+      st.retryAt = 0;
+      st.backoff = 2000;
+      st.lastKey = '';
+      st.active = false;
+      setStatus('connecting');
+    }
+    if(!st.ready){
+      if(!st.sock && Date.now() >= st.retryAt) connect(conf.id);
+      return;
+    }
+    const track = global.__ymBgNow ? Object.assign({}, global.__ymBgNow) : null;
+    if(track && track.playing && track.at && track.dur > 0){
+      // Догоняем позицию до момента отправки: Discord считает прогресс сам.
+      track.pos = Math.min(track.dur, track.pos + (Date.now() - track.at) / 1000);
+    }
+    if(!track || !track.title || Date.now() - (Number(track.at) || 0) > 30000){
+      setActivity(null);
+      return;
+    }
+    setActivity(track);
+  }
+
+  global.__ymBgNow = global.__ymBgNow || null;
+  setInterval(tick, 1500);
+  tick();
 }
 
 function __ymBgStartServer(){
@@ -2008,6 +2491,8 @@ function __ymBgStartServer(){
     });
     if(out.adaptive !== undefined) out.adaptive = !!out.adaptive;
     if(out.coverStyle !== undefined) out.coverStyle = normalizeCoverStyle(out.coverStyle);
+    if(out.discordRpc !== undefined) out.discordRpc = !!out.discordRpc;
+    if(out.discordClientId !== undefined) out.discordClientId = __ymBgDiscordId(out.discordClientId);
     // Старые три галочки тем больше не нужны.
     delete out.wheelQuiet; delete out.coverQuiet; delete out.avatarQuiet;
     if(out.file !== undefined) out.file = path.basename(String(out.file || ''));
@@ -3485,6 +3970,8 @@ function __ymBgStartServer(){
     if(d.adaptive !== undefined) cfg.adaptive = !!d.adaptive;
     else if(mediaChanged) cfg.adaptive = false;
     if(d.coverStyle !== undefined) cfg.coverStyle = normalizeCoverStyle(d.coverStyle);
+    if(d.discordRpc !== undefined) cfg.discordRpc = !!d.discordRpc;
+    if(d.discordClientId !== undefined) cfg.discordClientId = __ymBgDiscordId(d.discordClientId);
     if(d.fit !== undefined){
       cfg.fit = normalizeFit(d.fit);
     }
@@ -3835,6 +4322,37 @@ function __ymBgStartServer(){
       }
     }
 
+    if(req.method === 'POST' && u === '/rpc'){
+      if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const ct = String(req.headers['content-type'] || '').toLowerCase();
+      if(ct.indexOf('application/json') !== 0) return reply(res, 415, {ok: false, error: 'нужен application/json'});
+      let body;
+      try{ body = await readJsonBody(req, 64 * 1024); }
+      catch(e){ return reply(res, 400, {ok: false, error: String((e && e.message) || e)}); }
+      const num = function(v){ const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
+      const prevTitle = global.__ymBgNow && global.__ymBgNow.title;
+      global.__ymBgNow = {
+        title: String((body && body.title) || '').slice(0, 256),
+        artist: String((body && body.artist) || '').slice(0, 256),
+        album: String((body && body.album) || '').slice(0, 256),
+        cover: String((body && body.cover) || '').slice(0, 512),
+        playing: !!(body && body.playing),
+        pos: num(body && body.pos),
+        dur: num(body && body.dur),
+        at: Date.now()
+      };
+      if(global.__ymBgDiscordLog && global.__ymBgNow.title && global.__ymBgNow.title !== prevTitle){
+        global.__ymBgDiscordLog('трек: ' + (global.__ymBgNow.artist || '?') + ' — ' + global.__ymBgNow.title +
+          (global.__ymBgNow.playing ? '' : ' (пауза)'));
+      }
+      return reply(res, 200, {ok: true});
+    }
+    if(req.method === 'GET' && u === '/rpc'){
+      if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
+      const st = (global.__ymBgDiscordStatus && global.__ymBgDiscordStatus()) || {status: 'off'};
+      return reply(res, 200, {ok: true, status: st.status || 'off', error: st.error || ''});
+    }
+
     if(req.method === 'POST' && u === '/apply'){
       if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
       const ct = String(req.headers['content-type'] || '').toLowerCase();
@@ -3881,6 +4399,7 @@ function __ymBgStartServer(){
   try{ cleanTmp(); }catch(e){}
   try{ srv.listen(PORT, '127.0.0.1'); }
   catch(e){ try{ console.error('[ymbg] listen failed:', (e && e.message) || e); }catch(_){} }
+  try{ __ymBgDiscordStart(); }catch(e){}
 }
 
 function __ymApplyCustomBackground(wc){

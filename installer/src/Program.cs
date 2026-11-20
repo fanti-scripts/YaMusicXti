@@ -8,8 +8,8 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyDescription("Установщик мода «Фон Яндекс Музыки»")]
 [assembly: System.Reflection.AssemblyProduct("Фон Яндекс Музыки")]
 [assembly: System.Reflection.AssemblyCopyright("Неофициальный мод")]
-[assembly: System.Reflection.AssemblyVersion("2.2.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("2.2.0.0")]
+[assembly: System.Reflection.AssemblyVersion("2.3.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("2.3.0.0")]
 [assembly: System.Runtime.InteropServices.ComVisible(false)]
 
 namespace YMBG
