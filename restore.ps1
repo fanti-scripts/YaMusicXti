@@ -125,7 +125,7 @@ foreach ($sub in @("web-wallpaper", "thumbs")) {
 }
 
 # Кэш мода: превью, распакованные из архивов фоны и HTML-обои.
-$modCache = Join-Path $env:LOCALAPPDATA "YandexMusic-bg"
+$modCache = Join-Path $env:LOCALAPPDATA "YaMusicXti"
 if (Test-Path -LiteralPath $modCache) {
     Remove-Item -LiteralPath $modCache -Recurse -Force -ErrorAction SilentlyContinue
 }

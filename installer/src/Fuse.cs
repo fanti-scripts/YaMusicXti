@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace YMBG
+namespace YaMusicXti
 {
     /// <summary>
     /// Electron fuses: байт EnableEmbeddedAsarIntegrityValidation.

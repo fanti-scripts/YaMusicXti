@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace YMBG
+namespace YaMusicXti
 {
     /// <summary>Число JSON. Хранит исходный текст, чтобы не терять точность и формат.</summary>
     internal sealed class JNum

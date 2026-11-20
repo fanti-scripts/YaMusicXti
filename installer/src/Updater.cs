@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
-namespace YMBG
+namespace YaMusicXti
 {
     internal sealed class UpdateInfo
     {
@@ -29,17 +29,17 @@ namespace YMBG
     /// </summary>
     internal static class Updater
     {
-        public const string Repo = "fanti-scripts/yandex-music-bg";
-        public const string AssetPrefix = "YandexMusicBackground-Setup";
+        public const string Repo = "fanti-scripts/YaMusicXti";
+        public const string AssetPrefix = "YaMusicXti-Setup";
         private const string DefaultApi = "https://api.github.com/repos/" + Repo + "/releases/latest";
         private const int Tls12 = 3072;
 
-        /// <summary>Для тестов можно подставить свой адрес API через YMBG_UPDATE_API.</summary>
+        /// <summary>Для тестов можно подставить свой адрес API через YaMusicXti_UPDATE_API.</summary>
         public static string ApiUrl
         {
             get
             {
-                string custom = Environment.GetEnvironmentVariable("YMBG_UPDATE_API");
+                string custom = Environment.GetEnvironmentVariable("YaMusicXti_UPDATE_API");
                 return string.IsNullOrEmpty(custom) ? DefaultApi : custom;
             }
         }
@@ -80,7 +80,7 @@ namespace YMBG
             {
                 EnableTls();
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(ApiUrl);
-                req.UserAgent = "YMBG-Installer/" + Core.InstallerVersion;
+                req.UserAgent = "YaMusicXti-Installer/" + Core.InstallerVersion;
                 req.Accept = "application/vnd.github+json";
                 req.Timeout = 12000;
                 req.ReadWriteTimeout = 12000;
@@ -175,7 +175,7 @@ namespace YMBG
             {
                 throw new InvalidOperationException("Нет ссылки на файл обновления.");
             }
-            string dir = Path.Combine(Path.GetTempPath(), "YandexMusicBackground");
+            string dir = Path.Combine(Path.GetTempPath(), "YaMusicXti");
             Directory.CreateDirectory(dir);
             string dst = Path.Combine(dir, "setup-" + Sanitize(info.Version) + ".exe");
             if (File.Exists(dst) && IsGoodFile(dst, info))
@@ -195,7 +195,7 @@ namespace YMBG
             }
             EnableTls();
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(info.Url);
-            req.UserAgent = "YMBG-Installer/" + Core.InstallerVersion;
+            req.UserAgent = "YaMusicXti-Installer/" + Core.InstallerVersion;
             req.Timeout = 30000;
             req.ReadWriteTimeout = 120000;
             req.AllowAutoRedirect = true;

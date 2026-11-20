@@ -12,7 +12,7 @@ ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "installer", "src")
 PAYLOAD = os.path.join(ROOT, "installer", "payload.bin")
 MANIFEST = os.path.join(SRC, "app.manifest")
-OUT = os.path.join(ROOT, "Фон Яндекс Музыки.exe")
+OUT = os.path.join(ROOT, "YaMusicXti.exe")
 
 CSC_CANDIDATES = [
     r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe",

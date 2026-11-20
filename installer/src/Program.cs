@@ -4,15 +4,15 @@ using System.Diagnostics;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyTitle("Фон Яндекс Музыки — установщик")]
-[assembly: System.Reflection.AssemblyDescription("Установщик мода «Фон Яндекс Музыки»")]
-[assembly: System.Reflection.AssemblyProduct("Фон Яндекс Музыки")]
+[assembly: System.Reflection.AssemblyTitle("YaMusicXti — установщик")]
+[assembly: System.Reflection.AssemblyDescription("Установщик мода «YaMusicXti»")]
+[assembly: System.Reflection.AssemblyProduct("YaMusicXti")]
 [assembly: System.Reflection.AssemblyCopyright("Неофициальный мод")]
-[assembly: System.Reflection.AssemblyVersion("2.3.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("2.3.0.0")]
+[assembly: System.Reflection.AssemblyVersion("2.4.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("2.4.0.0")]
 [assembly: System.Runtime.InteropServices.ComVisible(false)]
 
-namespace YMBG
+namespace YaMusicXti
 {
     internal static class Program
     {
@@ -67,7 +67,7 @@ namespace YMBG
             Application.SetCompatibleTextRenderingDefault(false);
 
             bool created;
-            using (Mutex mutex = new Mutex(true, @"Local\YMBgInstaller", out created))
+            using (Mutex mutex = new Mutex(true, @"Local\YaMusicXtiInstaller", out created))
             {
                 if (!created)
                 {

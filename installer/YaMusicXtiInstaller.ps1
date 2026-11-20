@@ -17,7 +17,7 @@ $script:userDir = Join-Path $env:APPDATA "YandexMusic"
 $script:version = "1.1.0"
 
 if (-not $NoMutex) {
-    $script:mutex = New-Object System.Threading.Mutex -ArgumentList $false, "Local\YMBgInstaller"
+    $script:mutex = New-Object System.Threading.Mutex -ArgumentList $false, "Local\YaMusicXtiInstaller"
     if (-not $script:mutex.WaitOne(0)) { exit }
 }
 
@@ -100,7 +100,7 @@ function Test-HasBackup {
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Фон Яндекс Музыки — установщик"
+        Title="YaMusicXti — установщик"
         Height="650" Width="790"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
@@ -265,7 +265,7 @@ $xaml = @'
                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
           </Border>
           <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="Фон Яндекс Музыки" Foreground="#f1f1f4" FontSize="15" FontWeight="SemiBold"/>
+            <TextBlock Text="YaMusicXti" Foreground="#f1f1f4" FontSize="15" FontWeight="SemiBold"/>
             <TextBlock Text="установщик" Foreground="#7f7f88" FontSize="11.5" Margin="0,1,0,0"/>
           </StackPanel>
         </StackPanel>

@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace YMBG
+namespace YaMusicXti
 {
     internal sealed class MainForm : Form
     {
@@ -53,7 +53,7 @@ namespace YMBG
         {
             startDirHint = appDirHint;
 
-            Text = "Фон Яндекс Музыки — установщик";
+            Text = "YaMusicXti — установщик";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(WindowW, WindowH);
@@ -136,7 +136,7 @@ namespace YMBG
             logo.BackColor = Ui.Bg;
             Controls.Add(logo);
 
-            Label title = Ui.MakeLabel("Фон Яндекс Музыки", Ui.Title, Ui.TextMain, Ui.Bg);
+            Label title = Ui.MakeLabel("YaMusicXti", Ui.Title, Ui.TextMain, Ui.Bg);
             title.Bounds = new Rectangle(64, 8, 380, 22);
             Controls.Add(title);
 

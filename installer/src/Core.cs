@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace YMBG
+namespace YaMusicXti
 {
     internal sealed class AppState
     {
@@ -25,7 +25,7 @@ namespace YMBG
     /// <summary>Вся работа установщика: поиск клиента,apply/restore, файлы пользователя.</summary>
     internal static class Core
     {
-        public const string InstallerVersion = "2.3.0";
+        public const string InstallerVersion = "2.4.0";
         public const string AppName = "Яндекс Музыка";
 
         public static string UserDir
@@ -45,7 +45,7 @@ namespace YMBG
             get
             {
                 return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "YandexMusic-bg");
+                    "YaMusicXti");
             }
         }
 
@@ -472,11 +472,15 @@ namespace YMBG
             // в LocalAppData и в папке пользователя не остаётся.
             try
             {
-                string cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "YandexMusic-bg");
-                if (Directory.Exists(cache))
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                // Заодно убираем кэш от прежнего названия мода.
+                foreach (string name in new string[] { "YaMusicXti", "YandexMusic-bg" })
                 {
-                    Directory.Delete(cache, true);
+                    string cache = Path.Combine(local, name);
+                    if (Directory.Exists(cache))
+                    {
+                        Directory.Delete(cache, true);
+                    }
                 }
             }
             catch

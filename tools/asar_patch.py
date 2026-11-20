@@ -76,27 +76,27 @@ PRESET_IDS_JSON = json.dumps(PRESET_IDS)
 ENGINE = r"""
 (function(){
   'use strict';
-  if(window.__ymBgV2) return;
-  window.__ymBgV2 = true;
+  if(window.__yamxV2) return;
+  window.__yamxV2 = true;
 
   // Позиция трека: звук в Яндекс Музыке идёт через MediaSource, поэтому
   // <audio>.duration часто равен длине буфера (около 10 секунд), а не песни.
   // Ловим setPositionState — там настоящее время и длительность.
   (function(){
-    if(window.__ymBgPosHook) return;
-    window.__ymBgPosHook = true;
-    window.__ymBgPos = null;
+    if(window.__yamxPosHook) return;
+    window.__yamxPosHook = true;
+    window.__yamxPos = null;
     var ms;
     try{ ms = navigator.mediaSession; }catch(e){}
     if(!ms) return;
     function wrap(obj){
       if(!obj || typeof obj.setPositionState !== 'function') return;
       var orig = obj.setPositionState;
-      if(orig.__ymBgWrapped) return;
+      if(orig.__yamxWrapped) return;
       var wrapped = function(state){
         try{
           if(state && isFinite(state.duration) && state.duration > 0){
-            window.__ymBgPos = {
+            window.__yamxPos = {
               duration: Number(state.duration),
               position: Number(state.position) || 0,
               rate: isFinite(state.playbackRate) ? Number(state.playbackRate) : 1,
@@ -106,14 +106,14 @@ ENGINE = r"""
         }catch(e){}
         return orig.apply(obj, arguments);
       };
-      wrapped.__ymBgWrapped = true;
+      wrapped.__yamxWrapped = true;
       try{ obj.setPositionState = wrapped; }catch(e){}
     }
     wrap(ms);
     try{ wrap(Object.getPrototypeOf(ms)); }catch(e){}
   })();
 
-  var C = window.__YMBG__ || {};
+  var C = window.__YaMusicXti__ || {};
   var PRESETS = __PRESETS__;
   function presetById(id){
     for(var i = 0; i < PRESETS.length; i++){
@@ -430,7 +430,7 @@ ENGINE = r"""
         item.setAttribute('role', 'link');
         item.setAttribute('tabindex', '0');
         var span = item.querySelector('span');
-        if(span){ span.textContent = 'Фон'; span.setAttribute('title', 'Фон'); }
+        if(span){ span.textContent = 'Xti Mod'; span.setAttribute('title', 'Xti Mod'); }
         var svg = item.querySelector('svg');
         if(svg){
           svg.innerHTML = '<rect x="3.2" y="4.2" width="17.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
@@ -735,7 +735,7 @@ ENGINE = r"""
       clearMedia();
     }
   }
-  window.addEventListener('ymbg:update', function(e){
+  window.addEventListener('yamx:update', function(e){
     try{ updateAll(e.detail); }catch(err){}
   });
 
@@ -778,7 +778,7 @@ ENGINE = r"""
     '.ym-chip.on{background:rgba(255,219,77,.16);border-color:rgba(255,219,77,.55);color:#ffdb4d;}',
     '.ym-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-top:12px;}',
     '.ym-swatches.clamped{max-height:238px;overflow:hidden;}',
-    '.ym-swatches-more{margin-top:10px;width:100%;}',
+    '.ym-swatches-more{margin-top:10px;width:100%;height:34px;border-radius:10px;background:rgba(255,255,255,.05);}',
     '.ym-swatch{position:relative;height:74px;border:0;border-radius:11px;cursor:pointer;padding:8px 9px;box-sizing:border-box;text-align:left;overflow:hidden;font-family:inherit;background-color:#1b1e25;background-size:cover;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:transform .14s,box-shadow .14s;}',
     '.ym-swatch:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.24),0 6px 14px rgba(0,0,0,.35);}',
     '.ym-swatch.on{box-shadow:inset 0 0 0 2px #ffdb4d,0 6px 16px rgba(0,0,0,.4);}',
@@ -844,7 +844,6 @@ ENGINE = r"""
     '.ym-close:hover{background:rgba(255,255,255,.08);color:#fff;}',
     '#ym-nav-bg.ym-nav-active{color:#e6e6e6 !important;}',
     '#ym-nav-bg:hover{color:#fff;}',
-    '.ym-discord .ym-urlrow{margin-top:8px;}',
     '.ym-rpc-state.ok{color:#7ee787;}',
     '.ym-rpc-state.bad{color:#ff8a8a;}'
   ].join('\n');
@@ -922,11 +921,7 @@ ENGINE = r"""
           '<div class="ym-card-label ym-rpc-state"></div>',
         '</div>',
         '<label class="ym-switch-row"><span>Показывать трек в статусе Discord</span><input type="checkbox" class="ym-rpc"><span class="ym-switch"></span></label>',
-        '<div class="ym-urlrow">',
-          '<input class="ym-input ym-rpcid" maxlength="24" inputmode="numeric" placeholder="Application ID из Discord Developer Portal">',
-          '<button class="ym-btn ghost ym-rpc-save">Сохранить</button>',
-        '</div>',
-        '<div class="ym-hint">По умолчанию работает приложение мода — настраивать ничего не нужно. Свой Application ID можно взять на discord.com/developers/applications. В статусе появится кнопка со ссылкой на мод.</div>',
+        '<div class="ym-hint">Статус работает через приложение мода — настраивать ничего не нужно. В статусе появится кнопка со ссылкой на мод.</div>',
       '</section>',
       '<section class="ym-card ym-themes">',
         '<div class="ym-card-head">',
@@ -957,7 +952,7 @@ ENGINE = r"""
   function panelApi(body){
     return fetch('http://127.0.0.1:47823/apply', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+      headers: {'Content-Type': 'application/json', 'x-yamx-token': cfg.token || ''},
       body: JSON.stringify(body)
     }).then(function(r){ return r.json(); });
   }
@@ -1099,7 +1094,6 @@ ENGINE = r"""
     var ptransV = q('.ym-ptransv'), pblurV = q('.ym-pblurv'), psatV = q('.ym-psatv');
     var adaptEl = q('.ym-adapt');
     var rpcEl = q('.ym-rpc');
-    var rpcIdEl = q('.ym-rpcid');
     var rpcStateEl = q('.ym-rpc-state');
     var styleBtns = page.querySelectorAll('.ym-swatch');
     var swEl = q('.ym-swatches');
@@ -1146,7 +1140,7 @@ ENGINE = r"""
     var rpcPoll = null;
     function refreshRpc(){
       try{
-        fetch('http://127.0.0.1:47823/rpc', {headers: {'x-ymbg-token': cfg.token || ''}})
+        fetch('http://127.0.0.1:47823/rpc', {headers: {'x-yamx-token': cfg.token || ''}})
           .then(function(r){ return r.json(); })
           .then(function(r){
             if(!rpcStateEl) return;
@@ -1192,8 +1186,7 @@ ENGINE = r"""
         fit: fit,
         adaptive: !!adaptEl.checked,
         coverStyle: coverStyle,
-        discordRpc: !!rpcEl.checked,
-        discordClientId: String(rpcIdEl.value || '').replace(/[^0-9]/g, '').slice(0, 20)
+        discordRpc: !!rpcEl.checked
       };
     }
     function push(delay){
@@ -1221,8 +1214,8 @@ ENGINE = r"""
     function uploadTo(path, file, onDone){
       var xhr = new XMLHttpRequest();
       xhr.open('POST', 'http://127.0.0.1:47823' + path, true);
-      xhr.setRequestHeader('x-ymbg-token', cfg.token || '');
-      xhr.setRequestHeader('x-ymbg-name', encodeURIComponent(file.name || 'file'));
+      xhr.setRequestHeader('x-yamx-token', cfg.token || '');
+      xhr.setRequestHeader('x-yamx-name', encodeURIComponent(file.name || 'file'));
       xhr.upload.onprogress = function(e){
         if(e.lengthComputable) status('Загрузка ' + Math.round(e.loaded / e.total * 100) + '%…');
       };
@@ -1337,7 +1330,7 @@ ENGINE = r"""
       galEl.classList.add('ym-gal-busy');
       fetch('http://127.0.0.1:47823/use', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        headers: {'Content-Type': 'application/json', 'x-yamx-token': cfg.token || ''},
         body: JSON.stringify({f: it.name})
       })
         .then(function(r){ return r.json(); })
@@ -1555,7 +1548,7 @@ ENGINE = r"""
     function openEntry(it, mode){
       fetch('http://127.0.0.1:47823/open', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        headers: {'Content-Type': 'application/json', 'x-yamx-token': cfg.token || ''},
         body: JSON.stringify({f: it.name, mode: mode === 'folder' ? 'folder' : 'file'})
       })
         .then(function(r){ return r.json(); })
@@ -1570,7 +1563,7 @@ ENGINE = r"""
       status('Удаляю: ' + it.name + '…');
       fetch('http://127.0.0.1:47823/remove', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        headers: {'Content-Type': 'application/json', 'x-yamx-token': cfg.token || ''},
         body: JSON.stringify({f: it.name})
       })
         .then(function(r){ return r.json(); })
@@ -1586,7 +1579,7 @@ ENGINE = r"""
       var seq = ++galSeq;
       galEl.classList.add('ym-gal-busy');
       fetch('http://127.0.0.1:47823/library', {
-        headers: {'x-ymbg-token': cfg.token || ''}
+        headers: {'x-yamx-token': cfg.token || ''}
       })
         .then(function(r){ return r.json(); })
         .then(function(r){
@@ -1606,7 +1599,7 @@ ENGINE = r"""
       status('Открываю папку…');
       fetch('http://127.0.0.1:47823/folder', {
         method: 'GET',
-        headers: {'x-ymbg-token': cfg.token || ''}
+        headers: {'x-yamx-token': cfg.token || ''}
       })
         .then(function(r){ return r.json(); })
         .then(function(r){
@@ -1640,7 +1633,6 @@ ENGINE = r"""
     psatEl.value = (cfg.playerSaturate === undefined ? 1.15 : cfg.playerSaturate);
     adaptEl.checked = !!cfg.adaptive;
     rpcEl.checked = !!cfg.discordRpc;
-    rpcIdEl.value = String(cfg.discordClientId || '');
     markStyle();
     syncSwatches();
     if(cfg.web){
@@ -1655,7 +1647,7 @@ ENGINE = r"""
     labels();
     markFit();
     loadLibrary();
-    window.addEventListener('ymbg:update', onBgUpdate);
+    window.addEventListener('yamx:update', onBgUpdate);
 
     page.addEventListener('click', function(e){
       var chip = e.target && e.target.closest ? e.target.closest('.ym-preset') : null;
@@ -1706,23 +1698,8 @@ ENGINE = r"""
     });
     adaptEl.addEventListener('change', function(){ push(0); });
     rpcEl.addEventListener('change', function(){
-      if(rpcEl.checked && !String(rpcIdEl.value || '').trim()){
-        status('Сначала вставь Application ID', true);
-      }
       push(0);
       refreshRpc();
-    });
-    q('.ym-rpc-save').addEventListener('click', function(){
-      if(!String(rpcIdEl.value || '').trim()){
-        status('Вставь Application ID из Discord Developer Portal', true);
-        return;
-      }
-      push(0);
-      status('Discord: сохранено');
-      refreshRpc();
-    });
-    rpcIdEl.addEventListener('keydown', function(e){
-      if(e.key === 'Enter'){ q('.ym-rpc-save').click(); }
     });
     for(var si = 0; si < styleBtns.length; si++){
       styleBtns[si].addEventListener('click', function(){
@@ -1759,7 +1736,7 @@ ENGINE = r"""
     document.addEventListener('click', navGuard, true);
     window.addEventListener('resize', positionPage);
     page.__ymCleanup = function(){
-      window.removeEventListener('ymbg:update', onBgUpdate);
+      window.removeEventListener('yamx:update', onBgUpdate);
       if(rpcPoll){ clearInterval(rpcPoll); rpcPoll = null; }
       if(galObserver){ try{ galObserver.disconnect(); }catch(e){} galObserver = null; }
     };
@@ -1790,7 +1767,7 @@ ENGINE = r"""
     if(pageTimer){ clearInterval(pageTimer); pageTimer = null; }
   }
 
-  window.__ymBgOpenPanel = openPanel;
+  window.__yamxOpenPanel = openPanel;
 
   var lastCover = null;
   function tick(){
@@ -1846,7 +1823,7 @@ ENGINE = r"""
     try{
       fetch('http://127.0.0.1:47823/rpc', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', 'x-ymbg-token': cfg.token || ''},
+        headers: {'Content-Type': 'application/json', 'x-yamx-token': cfg.token || ''},
         body: JSON.stringify(obj)
       }).catch(function(){});
     }catch(e){}
@@ -1882,7 +1859,7 @@ ENGINE = r"""
     var pos = 0, dur = 0;
     // 1) Настоящие значения из mediaSession.setPositionState.
     try{
-      var ps = window.__ymBgPos;
+      var ps = window.__yamxPos;
       if(ps && isFinite(ps.duration) && ps.duration > 0){
         dur = ps.duration;
         pos = ps.position || 0;
@@ -1992,23 +1969,31 @@ ENGINE = r"""
 ENGINE = ENGINE.replace("__PRESETS__", PRESETS_JSON)
 
 INJECT_FUNC = r"""
-function __ymBgUserDir(){
+function __yamxUserDir(){
   return require('electron').app.getPath('userData');
 }
 
 // Папка с обоями пользователя: только фоны, без служебных файлов.
-function __ymBgWallDir(){
+function __yamxWallDir(){
   const path = require('node:path');
-  return path.join(__ymBgUserDir(), 'wallpapers');
+  return path.join(__yamxUserDir(), 'wallpapers');
 }
 
 // Служебные файлы мода: настройки, CSS, кэш превью и распакованных архивов.
-function __ymBgCacheDir(){
+function __yamxCacheDir(){
   const path = require('node:path');
-  return path.join(process.env.LOCALAPPDATA || __ymBgUserDir(), 'YandexMusic-bg');
+  const fs = require('node:fs');
+  const base = process.env.LOCALAPPDATA || __yamxUserDir();
+  const dir = path.join(base, 'YaMusicXti');
+  // Папка от прежнего названия мода: переносим настройки и обои один раз.
+  const legacy = path.join(base, 'YandexMusic-bg');
+  try{
+    if(!fs.existsSync(dir) && fs.existsSync(legacy)) fs.renameSync(legacy, dir);
+  }catch(e){}
+  return dir;
 }
 
-function __ymBgReadText(){
+function __yamxReadText(){
   const fs = require('node:fs');
   for(let i = 0; i < arguments.length; i++){
     const p = arguments[i];
@@ -2018,24 +2003,24 @@ function __ymBgReadText(){
   return '';
 }
 
-function __ymBgToken(){
+function __yamxToken(){
   // Токен живёт только в памяти процесса. На диск он не попадает.
-  if(!global.__ymBgToken){
+  if(!global.__yamxToken){
     try{
-      global.__ymBgToken = require('node:crypto').randomBytes(32).toString('hex');
+      global.__yamxToken = require('node:crypto').randomBytes(32).toString('hex');
     }catch(e){
-      global.__ymBgToken = '';
+      global.__yamxToken = '';
     }
   }
-  return global.__ymBgToken;
+  return global.__yamxToken;
 }
 
-function __ymBgCacheMediaDir(){
+function __yamxCacheMediaDir(){
   const path = require('node:path');
-  return path.join(__ymBgCacheDir(), 'media');
+  return path.join(__yamxCacheDir(), 'media');
 }
 
-function __ymBgSafeMediaPath(dir, name){
+function __yamxSafeMediaPath(dir, name){
   const fs = require('node:fs');
   const path = require('node:path');
   const base = path.basename(String(name || ''));
@@ -2044,7 +2029,7 @@ function __ymBgSafeMediaPath(dir, name){
   const allowed = ['.jpg','.jpeg','.png','.webp','.gif','.avif','.bmp',
                    '.mp4','.webm','.mov','.m4v','.ogv'];
   if(allowed.indexOf(ext) === -1) return '';
-  const dirs = [dir, __ymBgWallDir(), __ymBgUserDir(), __ymBgCacheMediaDir()];
+  const dirs = [dir, __yamxWallDir(), __yamxUserDir(), __yamxCacheMediaDir()];
   for(let i = 0; i < dirs.length; i++){
     if(!dirs[i]) continue;
     const full = path.resolve(dirs[i], base);
@@ -2055,7 +2040,7 @@ function __ymBgSafeMediaPath(dir, name){
   return '';
 }
 
-function __ymBgMediaInfo(file){
+function __yamxMediaInfo(file){
   const path = require('node:path');
   const ext = path.extname(String(file || '')).toLowerCase();
   const mimes = {'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp',
@@ -2074,16 +2059,16 @@ function normalizeCoverStyle(v){
   return COVER_STYLES.indexOf(s) === -1 ? 'mono' : s;
 }
 
-function __ymBgReadPayload(){
+function __yamxReadPayload(){
   const __fs = require('node:fs');
   const __path = require('node:path');
-  const __dir = __ymBgUserDir();
-  const __wall = __ymBgWallDir();
-  const __cache = __ymBgCacheDir();
+  const __dir = __yamxUserDir();
+  const __wall = __yamxWallDir();
+  const __cache = __yamxCacheDir();
 
   let __cfg = {};
   try{
-    const __raw = __ymBgReadText(__path.join(__cache, 'custom-background.json'),
+    const __raw = __yamxReadText(__path.join(__cache, 'custom-background.json'),
                                  __path.join(__dir, 'custom-background.json'))
       .replace(/^\uFEFF/, '');
     __cfg = JSON.parse(__raw) || {};
@@ -2091,9 +2076,9 @@ function __ymBgReadPayload(){
 
   const __fileRaw = String(__cfg.file || '');
   const __fileBase = __path.basename(__fileRaw);
-  const __file = __ymBgSafeMediaPath(__wall, __fileBase) ? __fileBase : '';
-  const __info = __ymBgMediaInfo(__file);
-  const __full = __file ? __ymBgSafeMediaPath(__wall, __file) : '';
+  const __file = __yamxSafeMediaPath(__wall, __fileBase) ? __fileBase : '';
+  const __info = __yamxMediaInfo(__file);
+  const __full = __file ? __yamxSafeMediaPath(__wall, __file) : '';
 
   let __src = '';
   let __isVideo = false;
@@ -2104,7 +2089,7 @@ function __ymBgReadPayload(){
       __isVideo = __info.isVideo;
       // Отдаём файл локальным сервером (с Range), а не data:-строкой:
       // так видео любого размера не раздувается в renderer и не ест память.
-      __src = 'http://127.0.0.1:47823/media?t=' + encodeURIComponent(__ymBgToken()) +
+      __src = 'http://127.0.0.1:47823/media?t=' + encodeURIComponent(__yamxToken()) +
               '&v=' + Math.round(__st.mtimeMs || Date.now());
     }
   }catch(e){ __src = ''; __isVideo = false; }
@@ -2128,12 +2113,12 @@ function __ymBgReadPayload(){
     adaptive: !!__cfg.adaptive,
     coverStyle: normalizeCoverStyle(__cfg.coverStyle),
     discordRpc: !!__cfg.discordRpc,
-    discordClientId: __ymBgDiscordId(__cfg.discordClientId),
+    discordClientId: DISCORD_APP_ID,
     src: __src,
     isVideo: __isVideo,
     web: String(__cfg.web || ''),
     webStamp: Number(__cfg.webStamp) || 0,
-    webBase: __cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
+    webBase: __cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__yamxToken()) + '/') : '',
     fit: String(__cfg.fit || 'smart'),
     css: __css,
     blur: __cfg.blur,
@@ -2147,19 +2132,19 @@ function __ymBgReadPayload(){
     fade: __cfg.fade,
     poll: __cfg.poll,
     file: __file,
-    token: __ymBgToken()
+    token: __yamxToken()
   };
 }
 
-function __ymBgSettingsPayload(cfg){
+function __yamxSettingsPayload(cfg){
   return {
     adaptive: !!cfg.adaptive,
     coverStyle: normalizeCoverStyle(cfg.coverStyle),
     discordRpc: !!cfg.discordRpc,
-    discordClientId: __ymBgDiscordId(cfg.discordClientId),
+    discordClientId: DISCORD_APP_ID,
     web: String(cfg.web || ''),
     webStamp: Number(cfg.webStamp) || 0,
-    webBase: cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__ymBgToken()) + '/') : '',
+    webBase: cfg.web ? ('http://127.0.0.1:47823/web/' + encodeURIComponent(__yamxToken()) + '/') : '',
     fit: String(cfg.fit || 'smart'),
     blur: cfg.blur,
     brightness: cfg.brightness,
@@ -2175,10 +2160,10 @@ function __ymBgSettingsPayload(cfg){
   };
 }
 
-function __ymBgBroadcast(payload){
+function __yamxBroadcast(payload){
   try{
     const { BrowserWindow } = require('electron');
-    const js = 'window.dispatchEvent(new CustomEvent("ymbg:update",{detail:' + JSON.stringify(payload) + '}));';
+    const js = 'window.dispatchEvent(new CustomEvent("yamx:update",{detail:' + JSON.stringify(payload) + '}));';
     BrowserWindow.getAllWindows().forEach(function(w){
       try{ w.webContents.executeJavaScript(js, true).catch(function(){}); }catch(e){}
     });
@@ -2187,35 +2172,32 @@ function __ymBgBroadcast(payload){
 
 // Discord Rich Presence: главный процесс говорит с Discord по каналу
 // discord-ipc-N, а трек ему присылает renderer на /rpc.
-function __ymBgDiscordId(v){
-  return String(v || '').replace(/[^0-9]/g, '').slice(0, 20);
-}
 
 // Приложение мода в Discord: ID и логотип уже вшиты, чтобы статус работал
-// из коробки. Свой ID можно вписать в панели «Фон».
+// из коробки. ID менять нельзя — статус всегда идёт через приложение мода.
 const DISCORD_APP_ID = '1573173806724419695';
-const DISCORD_REPO = 'https://github.com/fanti-scripts/yandex-music-bg';
-const DISCORD_LOGO = 'https://raw.githubusercontent.com/fanti-scripts/yandex-music-bg/main/docs/discord-icon-knife.png';
+const DISCORD_REPO = 'https://github.com/fanti-scripts/YaMusicXti';
+const DISCORD_LOGO = 'https://raw.githubusercontent.com/fanti-scripts/YaMusicXti/main/docs/discord-icon-knife.png';
 
-function __ymBgDiscordConfig(){
+function __yamxDiscordConfig(){
   try{
     const fs = require('node:fs');
     const path = require('node:path');
-    const f = path.join(__ymBgCacheDir(), 'custom-background.json');
+    const f = path.join(__yamxCacheDir(), 'custom-background.json');
     const raw = fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '');
     const c = JSON.parse(raw) || {};
     const on = c.discordRpc === undefined ? true : !!c.discordRpc;
-    const id = __ymBgDiscordId(c.discordClientId) || DISCORD_APP_ID;
-    return {on, id};
+    // Application ID всегда принадлежит моду — пользователь его не меняет.
+    return {on, id: DISCORD_APP_ID};
   }catch(e){ return {on: true, id: DISCORD_APP_ID}; }
 }
 
-function __ymBgDiscordStart(){
-  if(global.__ymBgDiscord) return;
+function __yamxDiscordStart(){
+  if(global.__yamxDiscord) return;
   const net = require('node:net');
   const fs = require('node:fs');
   const path = require('node:path');
-  const DIR = __ymBgCacheDir();
+  const DIR = __yamxCacheDir();
   const REPO_URL = DISCORD_REPO;
 
   function log(text){
@@ -2234,9 +2216,9 @@ function __ymBgDiscordStart(){
     retryAt: 0, backoff: 2000, status: 'off', error: '',
     active: false, lastKey: '', lastSent: 0
   };
-  global.__ymBgDiscord = st;
-  global.__ymBgDiscordLog = log;
-  global.__ymBgDiscordStatus = function(){
+  global.__yamxDiscord = st;
+  global.__yamxDiscordLog = log;
+  global.__yamxDiscordStatus = function(){
     return {status: st.status, error: st.error, ready: st.ready};
   };
 
@@ -2310,7 +2292,7 @@ function __ymBgDiscordStart(){
       details: 'Яндекс Музыка',
       state: 'Фон на всё окно',
       instance: false,
-      assets: {large_image: DISCORD_LOGO, large_text: 'Фон Яндекс Музыки'},
+      assets: {large_image: DISCORD_LOGO, large_text: 'YaMusicXti'},
       buttons: [{label: 'Скачать мод', url: REPO_URL}]
     };
   }
@@ -2402,7 +2384,7 @@ function __ymBgDiscordStart(){
   function connect(id){
     close();
     st.ready = false;
-    const override = String(process.env.YMBG_DISCORD_PIPE || '').trim();
+    const override = String(process.env.YaMusicXti_DISCORD_PIPE || '').trim();
     let idx = 0;
     (function next(){
       if(st.id !== id) return;
@@ -2441,7 +2423,7 @@ function __ymBgDiscordStart(){
   }
 
   function tick(){
-    const conf = __ymBgDiscordConfig();
+    const conf = __yamxDiscordConfig();
     if(!conf.on){
       clearActivity();
       if(st.sock) close();
@@ -2470,7 +2452,7 @@ function __ymBgDiscordStart(){
       if(!st.sock && Date.now() >= st.retryAt) connect(conf.id);
       return;
     }
-    const track = global.__ymBgNow ? Object.assign({}, global.__ymBgNow) : null;
+    const track = global.__yamxNow ? Object.assign({}, global.__yamxNow) : null;
     if(track && track.playing && track.at && track.dur > 0){
       // Догоняем позицию до момента отправки: Discord считает прогресс сам.
       track.pos = Math.min(track.dur, track.pos + (Date.now() - track.at) / 1000);
@@ -2482,14 +2464,14 @@ function __ymBgDiscordStart(){
     setActivity(track);
   }
 
-  global.__ymBgNow = global.__ymBgNow || null;
+  global.__yamxNow = global.__yamxNow || null;
   setInterval(tick, 1500);
   tick();
 }
 
-function __ymBgStartServer(){
-  if(global.__ymBgServer) return;
-  global.__ymBgServer = true;
+function __yamxStartServer(){
+  if(global.__yamxServer) return;
+  global.__yamxServer = true;
 
   const http = require('node:http');
   const fs = require('node:fs');
@@ -2498,8 +2480,8 @@ function __ymBgStartServer(){
   const zlib = require('node:zlib');
   const net = require('node:net');
   const dns = require('node:dns').promises;
-  const dir = __ymBgUserDir();
-  const WALL_DIR = __ymBgWallDir();
+  const dir = __yamxUserDir();
+  const WALL_DIR = __yamxWallDir();
   const PORT = 47823;
   const MAX = 2048 * 1024 * 1024;      // 2 ГБ: видео больше не упирается в 80 МБ
   const MAX_ZIP = 1024 * 1024 * 1024;  // архив обоев
@@ -2509,7 +2491,7 @@ function __ymBgStartServer(){
   // Папка с обоями пользователя — только фоны. Всё, что мод создаёт сам
   // (настройки, CSS, превью, HTML-обои, распакованные из архивов файлы),
   // лежит в отдельной папке в LocalAppData.
-  const CACHE_DIR = __ymBgCacheDir();
+  const CACHE_DIR = __yamxCacheDir();
   const CFG_DIR = CACHE_DIR;
   const MEDIA_DIR = path.join(CACHE_DIR, 'media');
   const WEB_DIR = path.join(CACHE_DIR, 'web');
@@ -2531,7 +2513,7 @@ function __ymBgStartServer(){
   };
 
   // Одноразовый токен на запуск приложения: не хранится на диске.
-  const TOKEN = __ymBgToken();
+  const TOKEN = __yamxToken();
 
   // Убираем старый токен, который раньше лежал открытым текстом.
   try{ fs.unlinkSync(path.join(dir, 'ymbg.token')); }catch(e){}
@@ -2549,7 +2531,9 @@ function __ymBgStartServer(){
     // По умолчанию статус включён и использует приложение мода. Явное
     // выключение переключателем сохраняется как false.
     out.discordRpc = out.discordRpc === undefined ? true : !!out.discordRpc;
-    out.discordClientId = __ymBgDiscordId(out.discordClientId) || DISCORD_APP_ID;
+    // Статус всегда идёт через приложение мода: чужой Application ID из
+    // старых конфигов игнорируем и перезаписываем.
+    out.discordClientId = DISCORD_APP_ID;
     // Старые три галочки тем больше не нужны.
     delete out.wheelQuiet; delete out.coverQuiet; delete out.avatarQuiet;
     if(out.file !== undefined) out.file = path.basename(String(out.file || ''));
@@ -2624,7 +2608,7 @@ function __ymBgStartServer(){
         let st;
         try{ st = fs.statSync(src); }catch(e){ return; }
         if(!st.isFile()) return;
-        if(/^\.ymbg-tmp-/.test(n) || /^\.custom-background/i.test(n) && /\.tmp$/i.test(n)){
+        if(/^\.yamx-tmp-/.test(n) || /^\.custom-background/i.test(n) && /\.tmp$/i.test(n)){
           try{ fs.unlinkSync(src); }catch(e){}
           return;
         }
@@ -2715,7 +2699,7 @@ function __ymBgStartServer(){
       [dir, CFG_DIR].forEach(function(base){
         try{
           fs.readdirSync(base).forEach(function(n){
-            if(/^\.ymbg-tmp-/.test(n) || /^\.custom-background\.json\.tmp$/.test(n)){
+            if(/^\.yamx-tmp-/.test(n) || /^\.custom-background\.json\.tmp$/.test(n)){
               try{ fs.unlinkSync(path.join(base, n)); }catch(e){}
             }
           });
@@ -3050,7 +3034,7 @@ function __ymBgStartServer(){
     try{ return crypto.timingSafeEqual(aa, bb); }catch(e){ return false; }
   }
   function authorized(req){
-    return tokenEquals(req.headers['x-ymbg-token'], TOKEN);
+    return tokenEquals(req.headers['x-yamx-token'], TOKEN);
   }
   function originAllowed(req){
     const o = req.headers.origin;
@@ -3694,7 +3678,7 @@ function __ymBgStartServer(){
   function tempPath(ext){
     tmpSeq++;
     try{ fs.mkdirSync(TMP_DIR, {recursive: true}); }catch(e){}
-    return path.join(TMP_DIR, 'ymbg-' + process.pid + '-' + Date.now() + '-' + tmpSeq + (ext || ''));
+    return path.join(TMP_DIR, 'yamx-' + process.pid + '-' + Date.now() + '-' + tmpSeq + (ext || ''));
   }
 
   async function fetchToTemp(url, max, ext){
@@ -3959,7 +3943,7 @@ function __ymBgStartServer(){
   async function handleApply(d){
     if(!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('некорректный запрос');
     const cfg = readCfg();
-    const existing = __ymBgSafeMediaPath(WALL_DIR, cfg.file) ? path.basename(String(cfg.file)) : '';
+    const existing = __yamxSafeMediaPath(WALL_DIR, cfg.file) ? path.basename(String(cfg.file)) : '';
     let fileName = existing;
     let saved = 0;
     let mediaChanged = false;
@@ -4028,15 +4012,14 @@ function __ymBgStartServer(){
     else if(mediaChanged) cfg.adaptive = false;
     if(d.coverStyle !== undefined) cfg.coverStyle = normalizeCoverStyle(d.coverStyle);
     if(d.discordRpc !== undefined) cfg.discordRpc = !!d.discordRpc;
-    if(d.discordClientId !== undefined) cfg.discordClientId = __ymBgDiscordId(d.discordClientId);
     if(d.fit !== undefined){
       cfg.fit = normalizeFit(d.fit);
     }
     writeCfg(cfg);
 
-    const payload = mediaChanged ? __ymBgReadPayload() : __ymBgSettingsPayload(cfg);
-    __ymBgBroadcast(payload);
-    const info = __ymBgMediaInfo(fileName || cfg.file);
+    const payload = mediaChanged ? __yamxReadPayload() : __yamxSettingsPayload(cfg);
+    __yamxBroadcast(payload);
+    const info = __yamxMediaInfo(fileName || cfg.file);
     return {ok: true, kind: cfg.web ? 'web' : 'media', web: cfg.web || '',
             file: cfg.web ? '' : (fileName || cfg.file), bytes: saved,
             isVideo: !!info.isVideo, note: webNote || ''};
@@ -4053,7 +4036,7 @@ function __ymBgStartServer(){
       res.writeHead(204, {
         'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-        'Access-Control-Allow-Headers': 'content-type,x-ymbg-token,x-ymbg-name',
+        'Access-Control-Allow-Headers': 'content-type,x-yamx-token,x-yamx-name',
         'Access-Control-Max-Age': '600',
         'Vary': 'Origin',
         'Content-Length': '0'
@@ -4245,7 +4228,7 @@ function __ymBgStartServer(){
       }
       if(changed){
         try{ writeCfg(cfg); }catch(e){}
-        try{ __ymBgBroadcast(__ymBgReadPayload()); }catch(e){}
+        try{ __yamxBroadcast(__yamxReadPayload()); }catch(e){}
       }
       return reply(res, 200, {ok: true, removed: name});
     }
@@ -4254,7 +4237,7 @@ function __ymBgStartServer(){
       if(!tokenEquals(queryToken(req), TOKEN)) return reply(res, 403, {ok: false, error: 'forbidden'});
       const want = queryParam(req, 'f');
       const cfg = readCfg();
-      const full = want ? safeMediaFile(want, ALLOWED_EXT) : __ymBgSafeMediaPath(WALL_DIR, cfg.file);
+      const full = want ? safeMediaFile(want, ALLOWED_EXT) : __yamxSafeMediaPath(WALL_DIR, cfg.file);
       if(!full) return reply(res, 404, {ok: false, error: 'no media'});
       return serveFile(req, res, full, full);
     }
@@ -4288,7 +4271,7 @@ function __ymBgStartServer(){
       try{
         let out;
         if(isWallpaper){
-          let name = String(req.headers['x-ymbg-name'] || '');
+          let name = String(req.headers['x-yamx-name'] || '');
           try{ name = decodeURIComponent(name); }catch(e){}
           const ext = path.extname(name).toLowerCase();
           if(ext === '.zip' || ext === '.html' || ext === '.htm'){
@@ -4316,10 +4299,10 @@ function __ymBgStartServer(){
         } else {
           const sniff = sniffExt(saved.head);
           if(!sniff || ALLOWED_EXT.indexOf(sniff) === -1) throw new Error('формат не поддерживается');
-          const rawName = String(req.headers['x-ymbg-name'] || '');
+          const rawName = String(req.headers['x-yamx-name'] || '');
           const w = adoptMedia(tmp, sniff, rawName);
           out = {kind: 'media', file: w.name, bytes: w.bytes};
-          const info = __ymBgMediaInfo(w.name);
+          const info = __yamxMediaInfo(w.name);
           out.isVideo = !!info.isVideo;
         }
         const cfg = readCfg();
@@ -4332,7 +4315,7 @@ function __ymBgStartServer(){
         else { cfg.web = ''; cfg.file = out.file; }
         cfg.lib = '';
         writeCfg(cfg);
-        __ymBgBroadcast(__ymBgReadPayload());
+        __yamxBroadcast(__yamxReadPayload());
         try{ if(fs.existsSync(tmp)) fs.unlinkSync(tmp); }catch(e){}
         return reply(res, 200, Object.assign({ok: true}, out));
       }catch(e){
@@ -4371,7 +4354,7 @@ function __ymBgStartServer(){
         }
         cfg.lib = name;
         writeCfg(cfg);
-        __ymBgBroadcast(__ymBgReadPayload());
+        __yamxBroadcast(__yamxReadPayload());
         return reply(res, 200, {ok: true, kind: cfg.web ? 'web' : 'media',
           file: cfg.web ? '' : cfg.file, web: cfg.web || '', note: out.note || ''});
       }catch(e){
@@ -4387,8 +4370,8 @@ function __ymBgStartServer(){
       try{ body = await readJsonBody(req, 64 * 1024); }
       catch(e){ return reply(res, 400, {ok: false, error: String((e && e.message) || e)}); }
       const num = function(v){ const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
-      const prevTitle = global.__ymBgNow && global.__ymBgNow.title;
-      global.__ymBgNow = {
+      const prevTitle = global.__yamxNow && global.__yamxNow.title;
+      global.__yamxNow = {
         title: String((body && body.title) || '').slice(0, 256),
         artist: String((body && body.artist) || '').slice(0, 256),
         album: String((body && body.album) || '').slice(0, 256),
@@ -4398,15 +4381,15 @@ function __ymBgStartServer(){
         dur: num(body && body.dur),
         at: Date.now()
       };
-      if(global.__ymBgDiscordLog && global.__ymBgNow.title && global.__ymBgNow.title !== prevTitle){
-        global.__ymBgDiscordLog('трек: ' + (global.__ymBgNow.artist || '?') + ' — ' + global.__ymBgNow.title +
-          (global.__ymBgNow.playing ? '' : ' (пауза)'));
+      if(global.__yamxDiscordLog && global.__yamxNow.title && global.__yamxNow.title !== prevTitle){
+        global.__yamxDiscordLog('трек: ' + (global.__yamxNow.artist || '?') + ' — ' + global.__yamxNow.title +
+          (global.__yamxNow.playing ? '' : ' (пауза)'));
       }
       return reply(res, 200, {ok: true});
     }
     if(req.method === 'GET' && u === '/rpc'){
       if(!authorized(req)) return reply(res, 403, {ok: false, error: 'forbidden'});
-      const st = (global.__ymBgDiscordStatus && global.__ymBgDiscordStatus()) || {status: 'off'};
+      const st = (global.__yamxDiscordStatus && global.__yamxDiscordStatus()) || {status: 'off'};
       return reply(res, 200, {ok: true, status: st.status || 'off', error: st.error || ''});
     }
 
@@ -4448,22 +4431,22 @@ function __ymBgStartServer(){
     reply(res, 404, {ok: false, error: 'not found'});
   });
   srv.on('error', function(e){
-    try{ console.error('[ymbg] server error:', (e && e.message) || e); }catch(_){}
+    try{ console.error('[yamx] server error:', (e && e.message) || e); }catch(_){}
   });
   try{ ensureDirs(); }catch(e){}
   try{ migrateLayout(); }catch(e){}
   try{ sweepWallDir(); }catch(e){}
   try{ cleanTmp(); }catch(e){}
   try{ srv.listen(PORT, '127.0.0.1'); }
-  catch(e){ try{ console.error('[ymbg] listen failed:', (e && e.message) || e); }catch(_){} }
-  try{ __ymBgDiscordStart(); }catch(e){}
+  catch(e){ try{ console.error('[yamx] listen failed:', (e && e.message) || e); }catch(_){} }
+  try{ __yamxDiscordStart(); }catch(e){}
 }
 
 function __ymApplyCustomBackground(wc){
-  __ymBgStartServer();
+  __yamxStartServer();
   try{
-    const payload = __ymBgReadPayload();
-    wc.executeJavaScript('window.__YMBG__=' + JSON.stringify(payload) + ';' + ENGINE_JS, true)
+    const payload = __yamxReadPayload();
+    wc.executeJavaScript('window.__YaMusicXti__=' + JSON.stringify(payload) + ';' + ENGINE_JS, true)
       .catch(function(){});
   }catch(e){}
 }
@@ -4474,7 +4457,7 @@ ANCHOR_HANDLER = 'webContents.on("did-finish-load", () => {'
 ANCHOR_INSERT = 'webContents.insertCSS(`'
 
 # Версия патча считается от содержимого: любое изменение кода => перепатчивание.
-MARKER_VERSION = "__ymBg" + hashlib.sha256(
+MARKER_VERSION = "__yamx" + hashlib.sha256(
     (INJECT_FUNC + ENGINE).encode("utf-8")
 ).hexdigest()[:10]
 

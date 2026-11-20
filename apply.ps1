@@ -93,7 +93,7 @@ if (-not (Test-Path -LiteralPath $asar)) { throw "Yandex Music resources not fou
 $exe = Get-MusicExe
 $userDir = Join-Path $env:APPDATA "YandexMusic"
 $wallDir = Join-Path $userDir "wallpapers"
-$cacheDir = Join-Path $env:LOCALAPPDATA "YandexMusic-bg"
+$cacheDir = Join-Path $env:LOCALAPPDATA "YaMusicXti"
 $py = Find-Python $Python
 
 Write-Host "Stopping Yandex Music..."

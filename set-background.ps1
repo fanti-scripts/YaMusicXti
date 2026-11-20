@@ -7,7 +7,7 @@
 $ErrorActionPreference = "Stop"
 $userDir = Join-Path $env:APPDATA "YandexMusic"
 $wallDir = Join-Path $userDir "wallpapers"
-$cacheDir = Join-Path $env:LOCALAPPDATA "YandexMusic-bg"
+$cacheDir = Join-Path $env:LOCALAPPDATA "YaMusicXti"
 $jsonPath = Join-Path $cacheDir "custom-background.json"
 $appDir = Join-Path $env:LOCALAPPDATA "Programs\YandexMusic"
 

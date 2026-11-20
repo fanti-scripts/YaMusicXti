@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace YMBG
+namespace YaMusicXti
 {
     /// <summary>Режим командной строки: удобно для проверки и для скриптов.</summary>
     internal static class Cli
@@ -132,7 +132,7 @@ namespace YMBG
                     return 2;
                 }
 
-                log(apply ? "Установка мода «Фон Яндекс Музыки»" : "Удаление мода «Фон Яндекс Музыки»");
+                log(apply ? "Установка мода «YaMusicXti»" : "Удаление мода «YaMusicXti»");
                 if (apply)
                 {
                     Core.Apply(appDir, launch, log);
@@ -226,7 +226,7 @@ namespace YMBG
         private static void PrintHelp()
         {
             string text =
-                "Фон Яндекс Музыки — установщик " + Core.InstallerVersion + "\r\n" +
+                "YaMusicXti — установщик " + Core.InstallerVersion + "\r\n" +
                 "\r\n" +
                 "Без аргументов открывает окно установщика.\r\n" +
                 "\r\n" +

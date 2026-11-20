@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-namespace YMBG
+namespace YaMusicXti
 {
     /// <summary>Файловые операции с повторами: клиент не всегда отпускает файлы сразу.</summary>
     internal static class Io

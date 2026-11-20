@@ -3,7 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 
-namespace YMBG
+namespace YaMusicXti
 {
     /// <summary>
     /// Встроенный ресурс payload.bin: JS-движок, якоря и файлы по умолчанию.

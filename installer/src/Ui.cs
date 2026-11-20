@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace YMBG
+namespace YaMusicXti
 {
     /// <summary>Тёмная тема: цвета, шрифты и мелкие рисованные контролы.</summary>
     internal static class Ui

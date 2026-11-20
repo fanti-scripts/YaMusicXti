@@ -1,14 +1,15 @@
-# Свой фон для Яндекс Музыки (Windows)
+# YaMusicXti — мод для Яндекс Музыки (Windows)
 
-[![contributors](https://img.shields.io/badge/contributors-fanti--scripts%20%2B%20DeepSeek-4D6BFE)](CONTRIBUTORS.md)
+[![contributors](https://img.shields.io/badge/contributors-fanti--scripts-4D6BFE)](CONTRIBUTORS.md)
 
-Красивая картинка (или видео) на всё окно приложения вместо анимированного
-«пузыря» и фото артиста на странице «Моя волна».
+Мод, который делает Яндекс Музыку своей: красивая картинка или видео на всё окно
+вместо анимированного «пузыря», каталог тем для обложек, галерея фонов и живой
+статус Discord с текущим треком.
 
 ## Скачать
 
-Готовый установщик лежит в [Releases](https://github.com/fanti-scripts/yandex-music-bg/releases/latest):
-скачай `YandexMusicBackground-Setup-2.3.0.exe`, запусти и нажми **Установить**.
+Готовый установщик лежит в [Releases](https://github.com/fanti-scripts/YaMusicXti/releases/latest):
+скачай `YaMusicXti-Setup-2.4.0.exe`, запусти и нажми **Установить**.
 Python и PowerShell для установки не нужны. Новая версия установщика сама
 предложит обновиться, если на GitHub вышла свежая.
 
@@ -86,26 +87,26 @@ Python и PowerShell для установки не нужны. Новая ве�
 
 ![Установщик мода](docs/screenshots/installer.png)
 
-`Фон Яндекс Музыки.exe` — самодостаточный установщик. Ни Python, ни PowerShell
+`YaMusicXti.exe` — самодостаточный установщик. Ни Python, ни PowerShell
 для него не нужны: движок и все файлы встроены внутрь. Запускается двойным
-кликом (или через `Фон Яндекс Музыки.cmd`).
+кликом (или через `YaMusicXti.cmd`).
 
 В окне видно версию Музыки, состояние патча и движка. Кнопки: **Установить /
 Переустановить**, **Удалить**, **Папка с фонами**, **Запустить Музыку**.
 
 Установщик проверяет обновления на GitHub при запуске и умеет обновить сам
-себя: скачивает новый exe в `%LOCALAPPDATA%\YandexMusic-bg\updates`, запускает
+себя: скачивает новый exe в `%LOCALAPPDATA%\YaMusicXti\updates`, запускает
 его с `--wait-pid` и передаёт работу, после чего старый файл убирается при
 следующем старте. Перекачивать установщик вручную не нужно.
 
 Для скриптов и диагностики у exe есть режим командной строки:
 
 ```bat
-"Фон Яндекс Музыки.exe" --status
-"Фон Яндекс Музыки.exe" --apply
-"Фон Яндекс Музыки.exe" --restore
-"Фон Яндекс Музыки.exe" --check-update
-"Фон Яндекс Музыки.exe" --update
+"YaMusicXti.exe" --status
+"YaMusicXti.exe" --apply
+"YaMusicXti.exe" --restore
+"YaMusicXti.exe" --check-update
+"YaMusicXti.exe" --update
 ```
 
 Дополнительно: `--launch` (запустить Музыку после операции), `--appdir <путь>`
@@ -116,7 +117,7 @@ Python и PowerShell для установки не нужны. Новая ве�
 Поставить или обновить патч (Музыка запустится сама):
 
 ```bat
-"Фон Яндекс Музыки.exe" --apply --launch
+"YaMusicXti.exe" --apply --launch
 ```
 
 Своя картинка: проще всего перетащить её на вкладку **Фон** внутри Музыки.
@@ -127,7 +128,7 @@ Python и PowerShell для установки не нужны. Новая ве�
 В папке `%APPDATA%\YandexMusic\` лежат только ваши фоны и
 `custom-background.json`. Всё, что мод создаёт сам — превью для галереи,
 HTML-обои и файлы, распакованные из `.zip`, — хранится отдельно, в
-`%LOCALAPPDATA%\YandexMusic-bg\`. Загруженные картинки и видео сохраняются под
+`%LOCALAPPDATA%\YaMusicXti\`. Загруженные картинки и видео сохраняются под
 своим именем; если такой файл уже есть, второй экземпляр не создаётся.
 
 Старые скрипты (`apply.ps1`, `set-background.ps1`) остались как запасной
@@ -165,8 +166,8 @@ powershell -ExecutionPolicy Bypass -File .\set-background.ps1 "$env:USERPROFILE\
 | Поле | Что делает | Значения |
 |---|---|---|
 | `adaptive` | Фон = обложка текущего трека | `true` / `false` |
-| `file` | Имя файла фона в `%APPDATA%\YandexMusic\` (или в кэше `%LOCALAPPDATA%\YandexMusic-bg\media\`); пусто — без своей картинки | `custom-background.jpg`, `wall.mp4`, … |
-| `web` | HTML-обои: `index.html` из кэша `%LOCALAPPDATA%\YandexMusic-bg\web\` или полный `https://`-адрес страницы | `index.html`, `https://…` |
+| `file` | Имя файла фона в `%APPDATA%\YandexMusic\` (или в кэше `%LOCALAPPDATA%\YaMusicXti\media\`); пусто — без своей картинки | `custom-background.jpg`, `wall.mp4`, … |
+| `web` | HTML-обои: `index.html` из кэша `%LOCALAPPDATA%\YaMusicXti\web\` или полный `https://`-адрес страницы | `index.html`, `https://…` |
 | `fit` | Масштаб фона: «Умно» или «Заполнить» | `smart` / `cover` |
 | `webStamp` | Служебная метка сборки HTML-обоев (чтобы iframe перезагрузился) | число |
 | `blur` | Размытие картинки | `0`–`40` (px) |
@@ -179,7 +180,7 @@ powershell -ExecutionPolicy Bypass -File .\set-background.ps1 "$env:USERPROFILE\
 | `playerSaturate` | Насыщенность стекла плеера | `0.5`–`2` |
 | `coverStyle` | Тема обложек: `off`, `mono`, `sepia`, `azure`, `violet`, `rose`, `gold`, `aurora`, `neon` и ещё 40+ id из каталога | строка, `mono` |
 | `discordRpc` | Показывать текущий трек в статусе Discord | `true` / `false`, `true` |
-| `discordClientId` | Application ID приложения Discord (только цифры) | строка, `"1573173806724419695"` |
+| `discordClientId` | Application ID приложения мода — зашит в мод, менять нельзя | `"1573173806724419695"` |
 | `fade` | Плавность смены фона | мс, `600` |
 | `poll` | Как часто проверять смену трека (адаптивный режим) | мс, `1500` |
 
@@ -226,13 +227,9 @@ powershell -ExecutionPolicy Bypass -File .\set-background.ps1 "$env:USERPROFILE\
 создавать приложение в Discord Developer Portal не нужно. Достаточно держать
 Discord запущенным — статус подключится сам.
 
-Если хочется своё название приложения:
-
-1. Открой [discord.com/developers/applications](https://discord.com/developers/applications)
-   и создай приложение (кнопка **New Application**).
-2. Скопируй **Application ID** на странице **General Information**.
-3. Вставь ID в поле блока **Discord** в панели «Фон».
-4. Оставь Discord запущенным — статус переподключится сам.
+Application ID жёстко зашит в мод и в панели не настраивается: статус всегда
+идёт через приложение мода. Это сделано специально, чтобы подмена чужого
+приложения не ломала кнопку со ссылкой на мод.
 
 Ни токены, ни логин Discord моду не передаются: связь идёт по локальному
 именованному каналу Discord IPC. Кнопки и обложка видны в профиле в Discord
@@ -240,7 +237,7 @@ Discord запущенным — статус подключится сам.
 это ограничение самого Discord.
 
 ```json
-{ "discordRpc": true, "discordClientId": "1573173806724419695" }
+{ "discordRpc": true }
 ```
 
 ### Включить адаптивный фон по обложке
@@ -300,7 +297,7 @@ Discord запущенным — статус подключится сам.
 Или из консоли:
 
 ```bat
-"Фон Яндекс Музыки.exe" --restore
+"YaMusicXti.exe" --restore
 ```
 
 Старый вариант: `powershell -ExecutionPolicy Bypass -File .\restore.ps1`.
@@ -334,7 +331,7 @@ Discord запущенным — статус подключится сам.
 - В папке `%APPDATA%\YandexMusic\` лежат только пользовательские фоны и
   `custom-background.json`. Служебные файлы мода — превью галереи, HTML-обои,
   распакованные из `.zip` фоны и временные загрузки — живут в
-  `%LOCALAPPDATA%\YandexMusic-bg\`, поэтому папка с обоями не засоряется.
+  `%LOCALAPPDATA%\YaMusicXti\`, поэтому папка с обоями не засоряется.
 - Движок создаёт фиксированный слой под интерфейсом, прячет «пузырь» и фото
   артиста, делает области приложения прозрачными и следит за обложкой трека
   (адаптивный режим).
@@ -348,8 +345,8 @@ Discord запущенным — статус подключится сам.
 ## Файлы
 
 ```
-Фон Яндекс Музыки.exe       — самодостаточный установщик (без Python и PowerShell)
-Фон Яндекс Музыки.cmd       — ярлык запуска установщика в корне
+YaMusicXti.exe              — самодостаточный установщик (без Python и PowerShell)
+YaMusicXti.cmd              — ярлык запуска установщика в корне
 build.cmd                   — пересобрать exe
 tools\build.py              — сборка (csc.exe из .NET Framework)
 tools\export_payload.py     — встраивание JS-движка в exe
@@ -357,7 +354,7 @@ installer\src\              — исходники установщика на C
 apply.ps1                   — старый способ: установить/обновить патч
 set-background.ps1          — старый способ: быстро сменить фон
 restore.ps1                 — старый способ: вернуть оригинальные файлы
-installer\YMBGInstaller.ps1 — старый WPF-установщик (fallback)
+installer\YaMusicXtiInstaller.ps1 — старый WPF-установщик (fallback)
 installer\python\           — Python 3.12 для старых скриптов и сборки (в репозиторий не входит)
 custom-background.json      — настройки фона (копируется в %APPDATA%\YandexMusic)
 custom-background.css       — дополнительные CSS-правила (необязательно)
@@ -375,7 +372,7 @@ build.cmd
 ```
 
 `build.cmd` найдёт Python в `installer\python` или в `PATH`, соберёт
-`Фон Яндекс Музыки.exe` и встроит в него JS-движок, CSS и JSON. В готовом exe
+`YaMusicXti.exe` и встроит в него JS-движок, CSS и JSON. В готовом exe
 Python не нужен.
 
 ## Лицензия
@@ -387,7 +384,6 @@ MIT. См. [LICENSE](LICENSE).
 | Участник | Вклад |
 |---|---|
 | **fanti-scripts** | Идея, дизайн, тесты на живой установке, релиз. |
-| **DeepSeek** (AI-ассистент) | Код установщика, документация, проверки. |
 
 ## Дисклеймер
 
