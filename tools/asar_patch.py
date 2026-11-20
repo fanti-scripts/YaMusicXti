@@ -198,8 +198,8 @@ ENGINE = r"""
     fit: String(C.fit || '') === 'cover' ? 'cover' : 'smart',
     // Один стиль на все обложки приложения: '' — как есть.
     coverStyle: normalizeCoverStyle(C.coverStyle),
-    discordRpc: !!C.discordRpc,
-    discordClientId: String(C.discordClientId || ''),
+    discordRpc: C.discordRpc === undefined ? true : !!C.discordRpc,
+    discordClientId: String(C.discordClientId || '1573173806724419695'),
     token: C.token || ''
   };
 
@@ -744,9 +744,10 @@ ENGINE = r"""
     '.ym-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 28px 4px;}',
     '.ym-page-title{margin:0;font-family:"YSMusic Headline","YS Text",sans-serif;font-size:32px;line-height:34px;font-weight:700;letter-spacing:-.2px;color:#e6e6e6;}',
     '.ym-page-sub{margin-top:7px;font-size:14px;line-height:20px;color:rgba(255,255,255,.5);}',
-    '.ym-page-body{flex:1;min-height:0;overflow:auto;padding:10px 28px 28px;overscroll-behavior:contain;}',
+    '.ym-page-body{flex:1;min-height:0;overflow:auto;padding:10px 28px 28px;overscroll-behavior:contain;display:flex;flex-direction:column;gap:16px;}',
     '.ym-page-body::-webkit-scrollbar{width:8px;}',
     '.ym-page-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:4px;}',
+    '.ym-page-body > *{flex:0 0 auto;}',
     '.ym-grid{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr);gap:16px;}',
     '@media (max-width: 980px){.ym-grid{grid-template-columns:1fr;}.ym-sliders{grid-template-columns:repeat(2,minmax(0,1fr));}}',
     '.ym-card{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:16px;box-sizing:border-box;}',
@@ -770,13 +771,14 @@ ENGINE = r"""
     '.ym-btn.ghost:hover{background:rgba(255,255,255,.11);}',
     '.ym-btn.primary{background:#ffdb4d;color:#17181c;font-weight:600;padding:0 24px;}',
     '.ym-btn.primary:hover{background:#ffe27a;}',
-    '.ym-settings{margin-top:10px;}',
     '.ym-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}',
     '.ym-chips{display:flex;gap:6px;flex-wrap:wrap;}',
     '.ym-chip{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7);border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;}',
     '.ym-chip:hover{background:rgba(255,255,255,.1);color:#fff;}',
     '.ym-chip.on{background:rgba(255,219,77,.16);border-color:rgba(255,219,77,.55);color:#ffdb4d;}',
     '.ym-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-top:12px;}',
+    '.ym-swatches.clamped{max-height:238px;overflow:hidden;}',
+    '.ym-swatches-more{margin-top:10px;width:100%;}',
     '.ym-swatch{position:relative;height:74px;border:0;border-radius:11px;cursor:pointer;padding:8px 9px;box-sizing:border-box;text-align:left;overflow:hidden;font-family:inherit;background-color:#1b1e25;background-size:cover;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:transform .14s,box-shadow .14s;}',
     '.ym-swatch:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.24),0 6px 14px rgba(0,0,0,.35);}',
     '.ym-swatch.on{box-shadow:inset 0 0 0 2px #ffdb4d,0 6px 16px rgba(0,0,0,.4);}',
@@ -787,8 +789,6 @@ ENGINE = r"""
     '.ym-swatch-none .ym-swatch-hex{color:rgba(255,255,255,.55);}',
     '.ym-fitrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:12.5px;color:#d7dbe3;}',
     '.ym-fitrow .ym-chips{flex-wrap:nowrap;}',
-    '.ym-gallery-card{margin-top:16px;}',
-    '.ym-page-body > .ym-card.ym-settings,.ym-page-body > .ym-card.ym-themes{margin-top:16px;}',
     '.ym-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(156px,1fr));gap:10px;margin-top:12px;}',
     '.ym-gal-empty{display:none;font-size:12.5px;color:rgba(255,255,255,.4);margin-top:10px;}',
     '.ym-gal-tile{position:relative;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#0b0d11;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:border-color .15s,transform .15s;}',
@@ -926,14 +926,14 @@ ENGINE = r"""
           '<input class="ym-input ym-rpcid" maxlength="24" inputmode="numeric" placeholder="Application ID из Discord Developer Portal">',
           '<button class="ym-btn ghost ym-rpc-save">Сохранить</button>',
         '</div>',
-        '<div class="ym-hint">Application ID берётся из приложения на discord.com/developers/applications. В статусе появится кнопка со ссылкой на мод.</div>',
+        '<div class="ym-hint">По умолчанию работает приложение мода — настраивать ничего не нужно. Свой Application ID можно взять на discord.com/developers/applications. В статусе появится кнопка со ссылкой на мод.</div>',
       '</section>',
       '<section class="ym-card ym-themes">',
         '<div class="ym-card-head">',
           '<div class="ym-card-title">Обложки</div>',
           '<div class="ym-card-label ym-coverstyle-now"></div>',
         '</div>',
-        '<div class="ym-swatches">' + PRESETS.map(function(p, i){
+        '<div class="ym-swatches clamped">' + PRESETS.map(function(p, i){
           var two = !!(p.a && p.b);
           var grad = two ? ('linear-gradient(135deg,' + p.a + ' 0%,' + p.b + ' 100%)') : '';
           return '<button class="ym-swatch' + (two ? '' : ' ym-swatch-none') + '"' +
@@ -944,6 +944,7 @@ ENGINE = r"""
             '<span class="ym-swatch-hex">' + (two ? (p.a + ' · ' + p.b) : 'без эффекта') + '</span>' +
             '</button>';
         }).join('') + '</div>',
+        '<button class="ym-chip ym-swatches-more" type="button"></button>',
       '</section>',
     '</div>',
     '<div class="ym-page-foot">',
@@ -1101,6 +1102,16 @@ ENGINE = r"""
     var rpcIdEl = q('.ym-rpcid');
     var rpcStateEl = q('.ym-rpc-state');
     var styleBtns = page.querySelectorAll('.ym-swatch');
+    var swEl = q('.ym-swatches');
+    var moreBtn = q('.ym-swatches-more');
+    var swExpanded = false;
+    function syncSwatches(){
+      if(!swEl || !moreBtn) return;
+      swEl.classList.toggle('clamped', !swExpanded);
+      var hasMore = swEl.scrollHeight > 238 + 1;
+      moreBtn.style.display = hasMore ? '' : 'none';
+      moreBtn.textContent = swExpanded ? 'Свернуть' : 'Показать все ' + styleBtns.length + ' цветов';
+    }
     var coverStyle = normalizeCoverStyle(cfg.coverStyle);
     var styleNow = q('.ym-coverstyle-now');
     var fitBtns = page.querySelectorAll('.ym-fit');
@@ -1631,6 +1642,7 @@ ENGINE = r"""
     rpcEl.checked = !!cfg.discordRpc;
     rpcIdEl.value = String(cfg.discordClientId || '');
     markStyle();
+    syncSwatches();
     if(cfg.web){
       nameEl.textContent = 'HTML-обои';
       dsub.textContent = /^https?:\/\//i.test(cfg.web) ? 'Веб-обои по ссылке' : 'Веб-обои из .zip';
@@ -1721,6 +1733,11 @@ ENGINE = r"""
         status('Обложки: ' + (cur ? cur.name : coverStyle));
       });
     }
+    if(moreBtn) moreBtn.addEventListener('click', function(){
+      swExpanded = !swExpanded;
+      syncSwatches();
+      status(swExpanded ? 'Показаны все цвета' : 'Показаны первые 3 ряда');
+    });
     q('.ym-apply').addEventListener('click', function(){ push(0); status('Применено'); });
     q('.ym-reset').addEventListener('click', function(){
       dimEl.value = 0.25; blurEl.value = 0; brightEl.value = 1; vigEl.value = 0; navEl.value = 0.35;
@@ -2174,6 +2191,12 @@ function __ymBgDiscordId(v){
   return String(v || '').replace(/[^0-9]/g, '').slice(0, 20);
 }
 
+// Приложение мода в Discord: ID и логотип уже вшиты, чтобы статус работал
+// из коробки. Свой ID можно вписать в панели «Фон».
+const DISCORD_APP_ID = '1573173806724419695';
+const DISCORD_REPO = 'https://github.com/fanti-scripts/yandex-music-bg';
+const DISCORD_LOGO = 'https://raw.githubusercontent.com/fanti-scripts/yandex-music-bg/main/docs/discord-icon-knife.png';
+
 function __ymBgDiscordConfig(){
   try{
     const fs = require('node:fs');
@@ -2181,8 +2204,10 @@ function __ymBgDiscordConfig(){
     const f = path.join(__ymBgCacheDir(), 'custom-background.json');
     const raw = fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '');
     const c = JSON.parse(raw) || {};
-    return {on: !!c.discordRpc, id: __ymBgDiscordId(c.discordClientId)};
-  }catch(e){ return {on: false, id: ''}; }
+    const on = c.discordRpc === undefined ? true : !!c.discordRpc;
+    const id = __ymBgDiscordId(c.discordClientId) || DISCORD_APP_ID;
+    return {on, id};
+  }catch(e){ return {on: true, id: DISCORD_APP_ID}; }
 }
 
 function __ymBgDiscordStart(){
@@ -2191,7 +2216,7 @@ function __ymBgDiscordStart(){
   const fs = require('node:fs');
   const path = require('node:path');
   const DIR = __ymBgCacheDir();
-  const REPO_URL = 'https://github.com/fanti-scripts/yandex-music-bg';
+  const REPO_URL = DISCORD_REPO;
 
   function log(text){
     try{
@@ -2278,14 +2303,29 @@ function __ymBgDiscordStart(){
     return act;
   }
 
+  // Когда ничего не играет — карточка с логотипом мода вместо пустоты.
+  function idleActivity(){
+    return {
+      type: 2,
+      details: 'Яндекс Музыка',
+      state: 'Фон на всё окно',
+      instance: false,
+      assets: {large_image: DISCORD_LOGO, large_text: 'Фон Яндекс Музыки'},
+      buttons: [{label: 'Скачать мод', url: REPO_URL}]
+    };
+  }
+
   function setActivity(track){
     if(!st.ready) return;
-    const act = track && track.title ? buildActivity(track) : null;
-    const key = act ? [track.title, track.artist, track.album, track.cover,
-                       track.playing ? 1 : 0, Math.round(track.dur),
-                       Math.round(track.pos / 10)].join('\u0001') : '';
+    const isTrack = !!(track && track.title);
+    const act = isTrack ? buildActivity(track) : idleActivity();
+    const key = isTrack
+      ? [track.title, track.artist, track.album, track.cover,
+         track.playing ? 1 : 0, Math.round(track.dur),
+         Math.round(track.pos / 10)].join('\u0001')
+      : 'idle';
     const now = Date.now();
-    if(key === st.lastKey && st.active === !!act && now - st.lastSent < 20000) return;
+    if(key === st.lastKey && st.active && now - st.lastSent < 20000) return;
     st.seq += 1;
     const ok = send(1, {
       cmd: 'SET_ACTIVITY',
@@ -2294,8 +2334,23 @@ function __ymBgDiscordStart(){
     });
     if(ok){
       st.lastKey = key;
-      st.active = !!act;
+      st.active = true;
       st.lastSent = now;
+    }
+  }
+
+  function clearActivity(){
+    if(!st.ready || !st.active) return;
+    st.seq += 1;
+    const ok = send(1, {
+      cmd: 'SET_ACTIVITY',
+      args: {pid: process.pid, activity: null},
+      nonce: String(st.seq)
+    });
+    if(ok){
+      st.lastKey = '';
+      st.active = false;
+      st.lastSent = Date.now();
     }
   }
 
@@ -2388,7 +2443,7 @@ function __ymBgDiscordStart(){
   function tick(){
     const conf = __ymBgDiscordConfig();
     if(!conf.on){
-      if(st.active) setActivity(null);
+      clearActivity();
       if(st.sock) close();
       st.id = '';
       st.lastKey = '';
@@ -2396,7 +2451,7 @@ function __ymBgDiscordStart(){
       return;
     }
     if(!conf.id){
-      if(st.active) setActivity(null);
+      clearActivity();
       if(st.sock) close();
       st.id = '';
       setStatus('no-id');
@@ -2491,8 +2546,10 @@ function __ymBgStartServer(){
     });
     if(out.adaptive !== undefined) out.adaptive = !!out.adaptive;
     if(out.coverStyle !== undefined) out.coverStyle = normalizeCoverStyle(out.coverStyle);
-    if(out.discordRpc !== undefined) out.discordRpc = !!out.discordRpc;
-    if(out.discordClientId !== undefined) out.discordClientId = __ymBgDiscordId(out.discordClientId);
+    // По умолчанию статус включён и использует приложение мода. Явное
+    // выключение переключателем сохраняется как false.
+    out.discordRpc = out.discordRpc === undefined ? true : !!out.discordRpc;
+    out.discordClientId = __ymBgDiscordId(out.discordClientId) || DISCORD_APP_ID;
     // Старые три галочки тем больше не нужны.
     delete out.wheelQuiet; delete out.coverQuiet; delete out.avatarQuiet;
     if(out.file !== undefined) out.file = path.basename(String(out.file || ''));

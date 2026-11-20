@@ -11,5 +11,8 @@
   "playerBlur": 20,
   "playerSaturate": 1.15,
   "fade": 600,
-  "poll": 1500
+  "poll": 1500,
+  "coverStyle": "mono",
+  "discordRpc": true,
+  "discordClientId": "1573173806724419695"
 }
