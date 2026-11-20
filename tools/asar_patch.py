@@ -2271,7 +2271,7 @@ function __ymBgDiscordStart(){
         end: now + Math.round((track.dur - track.pos) * 1000)
       };
     }
-    const buttons = [{label: 'Мод «Свой фон»', url: REPO_URL}];
+    const buttons = [{label: 'Скачать мод', url: REPO_URL}];
     const search = searchUrl((artist + ' ' + title).trim());
     if(search) buttons.push({label: 'Найти трек', url: search});
     act.buttons = buttons;
